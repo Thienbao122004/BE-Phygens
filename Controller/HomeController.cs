@@ -127,7 +127,22 @@ namespace BE_Phygens.Controllers
         private string GenerateJwtToken(User user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:SecretKey"]);
+            // Sử dụng cùng logic như trong Programs.cs để lấy JWT key
+            var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
+                           Environment.GetEnvironmentVariable("JWT_KEY") ?? 
+                           _configuration["Jwt:SecretKey"];
+            
+            if (string.IsNullOrEmpty(secretKey))
+            {
+                throw new InvalidOperationException("JWT_KEY or JWT_SECRET_KEY environment variable is not configured.");
+            }
+            
+            var key = Encoding.ASCII.GetBytes(secretKey);
+            
+            // Lấy issuer và audience từ environment variables như trong Programs.cs
+            var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
+            var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+            
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]
@@ -136,6 +151,8 @@ namespace BE_Phygens.Controllers
                     new Claim(ClaimTypes.Email, user.Email),
                 }),
                 Expires = DateTime.UtcNow.AddDays(7),
+                Issuer = issuer,
+                Audience = audience,
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);

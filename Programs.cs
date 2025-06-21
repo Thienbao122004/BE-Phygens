@@ -10,7 +10,7 @@ namespace BE_Phygens
 {
     public class Programs
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -50,16 +50,24 @@ namespace BE_Phygens
             {
                 try 
                 {
-                    // Parse connection string and add specific options for Railway
+                    // Parse connection string and add specific options for Railway/Supabase
                     var npgsqlConnectionString = new Npgsql.NpgsqlConnectionStringBuilder(connectionString)
                     {
-                        // Force IPv4 and add timeout settings
+                        // Force IPv4 and add timeout settings for Railway compatibility
                         Timeout = 30,
                         CommandTimeout = 60,
                         ApplicationName = "BE-Phygens-Railway",
-                        // SSL settings for Supabase
+                        // SSL settings for Supabase - more robust configuration
                         SslMode = Npgsql.SslMode.Require,
-                        TrustServerCertificate = true
+                        TrustServerCertificate = true,
+                        // Additional security settings for Supabase
+                        IncludeErrorDetail = true,
+                        // Add these for better Railway compatibility
+                        KeepAlive = 30,
+                        TcpKeepAlive = true,
+                        // Pooling settings
+                        MaxPoolSize = 20,
+                        MinPoolSize = 5
                     };
                     
                     options.UseNpgsql(npgsqlConnectionString.ConnectionString);
@@ -175,6 +183,39 @@ namespace BE_Phygens
                     }, statusCode: 500);
                 }
             });
+
+            // Auto migration trên Railway/Production
+            if (!app.Environment.IsDevelopment())
+            {
+                try 
+                {
+                    using var scope = app.Services.CreateScope();
+                    var context = scope.ServiceProvider.GetRequiredService<PhygensContext>();
+                    
+                    Console.WriteLine("Checking for pending migrations...");
+                    var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+                    
+                    if (pendingMigrations.Any())
+                    {
+                        Console.WriteLine($"Found {pendingMigrations.Count()} pending migrations. Applying...");
+                        await context.Database.MigrateAsync();
+                        Console.WriteLine("Migrations applied successfully!");
+                    }
+                    else
+                    {
+                        Console.WriteLine("No pending migrations found.");
+                    }
+                    
+                    // Test connection
+                    var canConnect = await context.Database.CanConnectAsync();
+                    Console.WriteLine($"Database connection test: {(canConnect ? "SUCCESS" : "FAILED")}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Migration error: {ex.Message}");
+                    // Don't stop the app, just log the error
+                }
+            }
 
             app.MapControllers();
 
