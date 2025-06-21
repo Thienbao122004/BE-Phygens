@@ -124,6 +124,7 @@ namespace BE_Phygens
 
             // Register custom services
             builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddHttpClient(); // For OpenAI API calls
 
             // Add Controllers
             builder.Services.AddControllers();

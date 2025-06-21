@@ -44,7 +44,7 @@ namespace BE_Phygens.Models
         public int Id { get; set; }
         
         [Column("exammatrixid")]
-        public int ExamMatrixId { get; set; }
+        public string ExamMatrixId { get; set; } = string.Empty;
         
         [Column("chapterid")]
         public int ChapterId { get; set; }

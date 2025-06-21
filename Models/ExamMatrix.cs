@@ -8,7 +8,7 @@ namespace BE_Phygens.Models
     {
         [Key]
         [Column("matrixid")]
-        public int MatrixId { get; set; }
+        public string MatrixId { get; set; } = string.Empty;
 
         [Required]
         [Column("examname")]
