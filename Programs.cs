@@ -126,6 +126,25 @@ namespace BE_Phygens
             builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddHttpClient(); // For OpenAI API calls
 
+            // Add CORS
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+                
+                options.AddPolicy("Development", policy =>
+                {
+                    policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "http://localhost:3000")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader()
+                          .AllowCredentials();
+                });
+            });
+
             // Add Controllers
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
@@ -192,6 +211,16 @@ builder.Services.AddHttpClient(); // For OpenAI API calls
             }
 
             app.UseRouting();
+
+            // Use CORS
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseCors("Development");
+            }
+            else
+            {
+                app.UseCors("AllowAll");
+            }
 
             app.UseAuthentication();
             app.UseAuthorization();
