@@ -17,14 +17,30 @@ namespace BE_Phygens
             // Load cấu hình
             builder.Configuration.AddEnvironmentVariables();
 
-            // JWT Key
-            var secretKey = builder.Configuration["Jwt:SecretKey"];
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
+            // JWT Key - lấy từ Railway environment variables hoặc appsettings
+            var secretKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? 
+                           Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
+                           builder.Configuration["Jwt:SecretKey"];
+            
+            if (string.IsNullOrEmpty(secretKey))
+            {
+                throw new InvalidOperationException("JWT_KEY or JWT_SECRET_KEY environment variable is not configured.");
+            }
+            
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
-            // Add DbContext
+            // Add DbContext - lấy connection string từ environment variable
+            var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+                                 Environment.GetEnvironmentVariable("SUPABASE_CONNECTION_STRING") ??
+                                 builder.Configuration.GetConnectionString("ConnectDB");
+            
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new InvalidOperationException("DATABASE_URL or SUPABASE_CONNECTION_STRING environment variable is not configured.");
+            }
             
             builder.Services.AddDbContext<PhygensContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("ConnectDB")));
+                options.UseNpgsql(connectionString));
 
             // Add Authentication (JWT + Google)
             builder.Services.AddAuthentication(options =>
@@ -40,20 +56,27 @@ namespace BE_Phygens
             })
             .AddJwtBearer(options =>
             {
+                var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
+                var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+                
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = key,
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
+                    ValidateIssuer = !string.IsNullOrEmpty(issuer),
+                    ValidIssuer = issuer,
+                    ValidateAudience = !string.IsNullOrEmpty(audience),
+                    ValidAudience = audience,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
             })
             .AddGoogle(googleOptions =>
             {
-                googleOptions.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-                googleOptions.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+                googleOptions.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? 
+                                        builder.Configuration["Authentication:Google:ClientId"];
+                googleOptions.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? 
+                                            builder.Configuration["Authentication:Google:ClientSecret"];
                 googleOptions.CallbackPath = "/api/LoginGoogle/google-callback";
             });
 
@@ -92,6 +115,14 @@ namespace BE_Phygens
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+
+            // Health check endpoint
+            app.MapGet("/", () => "BE-Phygens API is running!");
+            app.MapGet("/health", () => Results.Ok(new { 
+                status = "healthy", 
+                timestamp = DateTime.UtcNow,
+                environment = app.Environment.EnvironmentName 
+            }));
 
             app.MapControllers();
 
