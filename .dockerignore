@@ -1,0 +1,37 @@
+# Build artifacts
+bin/
+obj/
+out/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Visual Studio files
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# git
+.git/
+.gitignore
+
+# logs
+*.log
+
+# temp files
+*.tmp
+*.temp
+
+# Node modules (nếu có)
+node_modules/
+
+# Railway config
+railway.json 

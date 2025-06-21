@@ -67,14 +67,27 @@ namespace BE_Phygens
 
             var app = builder.Build();
 
-            app.UseHttpsRedirection();
+            // Cấu hình cho Railway - lấy port từ environment variable
+            var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+            app.Urls.Add($"http://0.0.0.0:{port}");
+
+            // Chỉ redirect HTTPS trong development
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseHttpsRedirection();
+            }
+
             app.UseRouting();
 
             app.UseAuthentication();
             app.UseAuthorization();
 
-            app.UseSwagger();
-            app.UseSwaggerUI();
+            // Swagger chỉ trong Development hoặc có biến môi trường ENABLE_SWAGGER
+            if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
+            {
+                app.UseSwagger();
+                app.UseSwaggerUI();
+            }
 
             app.MapControllers();
 
