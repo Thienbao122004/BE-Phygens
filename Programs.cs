@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using BE_Phygens.Models;
+using BE_Phygens.Services;
 
 namespace BE_Phygens
 {
@@ -121,10 +122,57 @@ namespace BE_Phygens
             // Authorization (nếu bạn cần Role-based policy)
             builder.Services.AddAuthorization();
 
+            // Register custom services
+            builder.Services.AddScoped<IJwtService, JwtService>();
+
             // Add Controllers
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            
+            // Configure Swagger with JWT Authentication
+            builder.Services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo 
+                { 
+                    Title = "BE-Phygens API", 
+                    Version = "v1",
+                    Description = "API cho hệ thống giáo dục Vật lý Phygens"
+                });
+
+                // Add JWT Authentication to Swagger
+                c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"",
+                    Name = "Authorization",
+                    In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT"
+                });
+
+                c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+                {
+                    {
+                        new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                        {
+                            Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                            {
+                                Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        new string[] {}
+                    }
+                });
+
+                // Include XML comments if available
+                var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+                var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+                if (File.Exists(xmlPath))
+                {
+                    c.IncludeXmlComments(xmlPath);
+                }
+            });
 
             var app = builder.Build();
 

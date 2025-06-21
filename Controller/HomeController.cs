@@ -76,7 +76,7 @@ namespace BE_Phygens.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during Google authentication");
-                return StatusCode(500, "An error occurred during authentication: {ex.Message}");
+                return StatusCode(500, $"An error occurred during authentication: {ex.Message}");
             }
         }
 
@@ -96,7 +96,10 @@ namespace BE_Phygens.Controllers
                     Email = request.Email,
                     FullName = request.FullName,
                     Username = request.Email.Split('@')[0],
-                    PasswordHash = null // Đảm bảo password là null cho người dùng đăng nhập bằng Google
+                    PasswordHash = string.Empty, // Fix: không được null
+                    Role = "student", // Fix: thêm role mặc định
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Users.Add(user);
