@@ -14,6 +14,14 @@ namespace BE_Phygens.Models
         [Column("topicid")]
         public string TopicId { get; set; } = string.Empty;
 
+        // Helper property to bridge TopicId with ChapterId for new features
+        [NotMapped]
+        public int? ChapterId
+        {
+            get => int.TryParse(TopicId, out var id) ? id : null;
+            set => TopicId = value?.ToString() ?? "";
+        }
+
         [Required]
         [Column("questiontext")]
         public string QuestionText { get; set; } = string.Empty;
