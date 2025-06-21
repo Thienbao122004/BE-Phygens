@@ -120,12 +120,31 @@ namespace BE_Phygens
                 });
             }
 
-            // // Health check endpoint
-            // app.MapGet("/health", () => Results.Ok(new { 
-            //     status = "healthy", 
-            //     timestamp = DateTime.UtcNow,
-            //     environment = app.Environment.EnvironmentName 
-            // }));
+            // Health check endpoint
+            app.MapGet("/health", async (PhygensContext context) => 
+            {
+                try
+                {
+                    var canConnect = await context.Database.CanConnectAsync();
+                    var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+                    
+                    return Results.Ok(new { 
+                        status = canConnect ? "healthy" : "database_error",
+                        database_connected = canConnect,
+                        pending_migrations = pendingMigrations.ToList(),
+                        timestamp = DateTime.UtcNow,
+                        environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    return Results.Json(new { 
+                        status = "error", 
+                        error = ex.Message,
+                        timestamp = DateTime.UtcNow 
+                    }, statusCode: 500);
+                }
+            });
 
             app.MapControllers();
 

@@ -24,10 +24,15 @@ namespace BE_Phygens.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllExams()
         {
-            var exams = await _context.Exams
-                .Include(e => e.ExamQuestions)
-                .ThenInclude(eq => eq.Question)
-                .ToListAsync();
+            try
+            {
+                // Test database connection first
+                await _context.Database.CanConnectAsync();
+                
+                var exams = await _context.Exams
+                    .Include(e => e.ExamQuestions)
+                    .ThenInclude(eq => eq.Question)
+                    .ToListAsync();
             
             var examDtos = exams.Select(e => new ExamDto
             {
@@ -55,7 +60,16 @@ namespace BE_Phygens.Controllers
                 }).ToList() ?? new List<ExamQuestionDto>()
             }).ToList();
 
-            return Ok(examDtos);
+                return Ok(examDtos);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message,
+                    details = ex.InnerException?.Message 
+                });
+            }
         }
 
         // GET: api/exams/{id}
