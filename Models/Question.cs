@@ -59,4 +59,4 @@ namespace BE_Phygens.Models
         public virtual ICollection<Explanation> Explanations { get; set; } = new List<Explanation>();
         public virtual ICollection<StudentAnswer> StudentAnswers { get; set; } = new List<StudentAnswer>();
     }
-} 
+}

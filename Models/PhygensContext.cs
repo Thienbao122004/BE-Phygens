@@ -47,6 +47,11 @@ namespace BE_Phygens.Models
             {
                 entity.HasCheckConstraint("CK_Question_QuestionType", "questiontype IN ('multiple_choice', 'true_false', 'essay')");
                 entity.HasCheckConstraint("CK_Question_DifficultyLevel", "difficultylevel IN ('easy', 'medium', 'hard')");
+                
+                // Explicit column mapping to prevent EF Core confusion
+                entity.Property(q => q.ChapterId)
+                    .HasColumnName("chapterid")
+                    .HasColumnType("integer");
             });
 
             // AnswerChoice constraints
