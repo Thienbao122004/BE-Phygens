@@ -17,9 +17,9 @@ namespace BE_Phygens
             // Load cấu hình
             builder.Configuration.AddEnvironmentVariables();
 
-            // JWT Key - lấy từ Railway environment variables hoặc appsettings
-            var secretKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? 
-                           Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
+            // JWT Key - ưu tiên JWT_SECRET_KEY hiện tại, fallback JWT_KEY
+            var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
+                           Environment.GetEnvironmentVariable("JWT_KEY") ?? 
                            builder.Configuration["Jwt:SecretKey"];
             
             if (string.IsNullOrEmpty(secretKey))
@@ -119,26 +119,6 @@ namespace BE_Phygens
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
-
-            // Auto-migrate database on startup (for production)
-            if (!app.Environment.IsDevelopment())
-            {
-                try
-                {
-                    using (var scope = app.Services.CreateScope())
-                    {
-                        var context = scope.ServiceProvider.GetRequiredService<PhygensContext>();
-                        Console.WriteLine("Checking database migrations...");
-                        context.Database.Migrate();
-                        Console.WriteLine("Database migrations applied successfully.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error applying migrations: {ex.Message}");
-                    // Don't throw - let app start and show error in health check
-                }
-            }
 
             // Cấu hình cho Railway - lấy port từ environment variable
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
