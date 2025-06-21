@@ -1,0 +1,6 @@
+@BE_Phygens_HostAddress = http://localhost:5298
+
+GET {{BE_Phygens_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
