@@ -8,7 +8,7 @@ using BE_Phygens.Models;
 
 namespace BE_Phygens
 {
-    public class Program
+    public class Programs
     {
         public static void Main(string[] args)
         {
@@ -22,8 +22,9 @@ namespace BE_Phygens
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.")));
 
             // Add DbContext
+            
             builder.Services.AddDbContext<PhygensContext>(options =>
-                options.UseSqlServer(builder.Configuration.GetConnectionString("ConnectDB")));
+                options.UseNpgsql(builder.Configuration.GetConnectionString("ConnectDB")));
 
             // Add Authentication (JWT + Google)
             builder.Services.AddAuthentication(options =>

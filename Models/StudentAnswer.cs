@@ -1,29 +1,46 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class StudentAnswer
+namespace BE_Phygens.Models
 {
-    public string AnswerId { get; set; } = null!;
+    [Table("studentanswer")]
+    public class StudentAnswer
+    {
+        [Key]
+        [Column("answerid")]
+        public string AnswerId { get; set; } = string.Empty;
 
-    public string AttemptId { get; set; } = null!;
+        [Required]
+        [Column("attemptid")]
+        public string AttemptId { get; set; } = string.Empty;
 
-    public string QuestionId { get; set; } = null!;
+        [Required]
+        [Column("questionid")]
+        public string QuestionId { get; set; } = string.Empty;
 
-    public string? SelectedChoiceId { get; set; }
+        [Column("selectedchoiceid")]
+        public string? SelectedChoiceId { get; set; }
 
-    public string? StudentTextAnswer { get; set; }
+        [Column("studenttextanswer")]
+        public string? StudentTextAnswer { get; set; }
 
-    public bool? IsCorrect { get; set; }
+        [Column("iscorrect")]
+        public bool IsCorrect { get; set; } = false;
 
-    public decimal? PointsEarned { get; set; }
+        [Column("pointsearned")]
+        public decimal PointsEarned { get; set; } = 0;
 
-    public DateTime? AnsweredAt { get; set; }
+        [Column("answeredat")]
+        public DateTime AnsweredAt { get; set; } = DateTime.UtcNow;
 
-    public virtual StudentAttempt Attempt { get; set; } = null!;
+        // Navigation properties
+        [ForeignKey("AttemptId")]
+        public virtual StudentAttempt Attempt { get; set; } = null!;
 
-    public virtual Question Question { get; set; } = null!;
+        [ForeignKey("QuestionId")]
+        public virtual Question Question { get; set; } = null!;
 
-    public virtual AnswerChoice? SelectedChoice { get; set; }
-}
+        [ForeignKey("SelectedChoiceId")]
+        public virtual AnswerChoice? SelectedChoice { get; set; }
+    }
+} 

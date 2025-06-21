@@ -1,23 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class LearningProgress
+namespace BE_Phygens.Models
 {
-    public string ProgressId { get; set; } = null!;
+    [Table("learningprogress")]
+    public class LearningProgress
+    {
+        [Key]
+        [Column("progressid")]
+        public string ProgressId { get; set; } = string.Empty;
 
-    public string UserId { get; set; } = null!;
+        [Required]
+        [Column("userid")]
+        public string UserId { get; set; } = string.Empty;
 
-    public string TopicId { get; set; } = null!;
+        [Required]
+        [Column("topicid")]
+        public string TopicId { get; set; } = string.Empty;
 
-    public int? Attempts { get; set; }
+        [Column("attempts")]
+        public int Attempts { get; set; } = 0;
 
-    public decimal? AvgScore { get; set; }
+        [Column("avgscore")]
+        public decimal AvgScore { get; set; } = 0;
 
-    public DateTime? LastUpdated { get; set; }
+        [Column("lastupdated")]
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
-    public virtual PhysicsTopic Topic { get; set; } = null!;
+        // Navigation properties
+        [ForeignKey("UserId")]
+        public virtual User User { get; set; } = null!;
 
-    public virtual User User { get; set; } = null!;
-}
+        [ForeignKey("TopicId")]
+        public virtual PhysicsTopic Topic { get; set; } = null!;
+    }
+} 

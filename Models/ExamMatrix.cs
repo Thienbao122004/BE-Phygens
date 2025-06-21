@@ -1,23 +1,36 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class ExamMatrix
+namespace BE_Phygens.Models
 {
-    public string MatrixId { get; set; } = null!;
+    [Table("exammatrix")]
+    public class ExamMatrix
+    {
+        [Key]
+        [Column("matrixid")]
+        public string MatrixId { get; set; } = string.Empty;
 
-    public string Subject { get; set; } = null!;
+        [Required]
+        [Column("subject")]
+        public string Subject { get; set; } = string.Empty;
 
-    public string Topic { get; set; } = null!;
+        [Required]
+        [Column("topic")]
+        public string Topic { get; set; } = string.Empty;
 
-    public int? NumEasy { get; set; }
+        [Column("numeasy")]
+        public int NumEasy { get; set; } = 0;
 
-    public int? NumMedium { get; set; }
+        [Column("nummedium")]
+        public int NumMedium { get; set; } = 0;
 
-    public int? NumHard { get; set; }
+        [Column("numhard")]
+        public int NumHard { get; set; } = 0;
 
-    public int? TotalQuestions { get; set; }
+        [Column("totalquestions")]
+        public int TotalQuestions { get; set; } = 0;
 
-    public DateTime? CreatedAt { get; set; }
-}
+        [Column("createdat")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+} 

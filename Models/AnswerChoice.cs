@@ -1,23 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class AnswerChoice
+namespace BE_Phygens.Models
 {
-    public string ChoiceId { get; set; } = null!;
+    [Table("answerchoice")]
+    public class AnswerChoice
+    {
+        [Key]
+        [Column("choiceid")]
+        public string ChoiceId { get; set; } = string.Empty;
 
-    public string QuestionId { get; set; } = null!;
+        [Required]
+        [Column("questionid")]
+        public string QuestionId { get; set; } = string.Empty;
 
-    public string ChoiceLabel { get; set; } = null!;
+        [Required]
+        [Column("choicelabel")]
+        public string ChoiceLabel { get; set; } = string.Empty;
 
-    public string ChoiceText { get; set; } = null!;
+        [Required]
+        [Column("choicetext")]
+        public string ChoiceText { get; set; } = string.Empty;
 
-    public bool? IsCorrect { get; set; }
+        [Column("iscorrect")]
+        public bool IsCorrect { get; set; } = false;
 
-    public int? DisplayOrder { get; set; }
+        [Column("displayorder")]
+        public int? DisplayOrder { get; set; }
 
-    public virtual Question Question { get; set; } = null!;
+        // Navigation properties
+        [ForeignKey("QuestionId")]
+        public virtual Question Question { get; set; } = null!;
 
-    public virtual ICollection<StudentAnswer> StudentAnswers { get; set; } = new List<StudentAnswer>();
-}
+        public virtual ICollection<StudentAnswer> StudentAnswers { get; set; } = new List<StudentAnswer>();
+    }
+} 

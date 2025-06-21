@@ -35,7 +35,7 @@ namespace BE_Phygens.DTOs
 
     public class ExamMatrixDto
     {
-        public string TopicId { get; set; }
+        public string Topic { get; set; }
         public int NumEasy { get; set; }
         public int NumMedium { get; set; }
         public int NumHard { get; set; }
@@ -73,10 +73,10 @@ namespace BE_Phygens.DTOs
     public class QuestionDto
     {
         public string QuestionId { get; set; }
-        public string TopicId { get; set; }
+        public string Topic { get; set; }
         public string QuestionText { get; set; }
         public string QuestionType { get; set; }
-        public string DifficultyLevel { get; set; }
+        public string Difficulty { get; set; }
         public string ImageUrl { get; set; }
         public string CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
