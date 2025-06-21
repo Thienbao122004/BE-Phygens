@@ -69,7 +69,11 @@ namespace BE_Phygens
 
             // Cấu hình cho Railway - lấy port từ environment variable
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-            app.Urls.Add($"http://0.0.0.0:{port}");
+            if (!app.Environment.IsDevelopment())
+            {
+                app.Urls.Clear();
+                app.Urls.Add($"http://0.0.0.0:{port}");
+            }
 
             // Chỉ redirect HTTPS trong development
             if (app.Environment.IsDevelopment())
