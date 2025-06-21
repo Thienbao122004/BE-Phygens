@@ -31,13 +31,13 @@ namespace BE_Phygens
 
             // Add DbContext - lấy connection string từ environment variable
             var connectionString = Environment.GetEnvironmentVariable("ConnectDB") ?? 
-                                 Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
+                                 Environment.GetEnvironmentVariable("ConnectDB") ?? 
                                  Environment.GetEnvironmentVariable("SUPABASE_CONNECTION_STRING") ??
                                  builder.Configuration.GetConnectionString("ConnectDB");
             
             if (string.IsNullOrEmpty(connectionString))
             {
-                throw new InvalidOperationException("ConnectDB, DATABASE_URL or SUPABASE_CONNECTION_STRING environment variable is not configured.");
+                throw new InvalidOperationException("ConnectDB, ConnectDB or SUPABASE_CONNECTION_STRING environment variable is not configured.");
             }
             
             // Debug: Log connection string (hide password)
