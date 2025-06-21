@@ -113,16 +113,19 @@ namespace BE_Phygens
             if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
             {
                 app.UseSwagger();
-                app.UseSwaggerUI();
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "BE-Phygens API V1");
+                    c.RoutePrefix = ""; // Đặt Swagger UI làm trang chủ
+                });
             }
 
-            // Health check endpoint
-            app.MapGet("/", () => "BE-Phygens API is running!");
-            app.MapGet("/health", () => Results.Ok(new { 
-                status = "healthy", 
-                timestamp = DateTime.UtcNow,
-                environment = app.Environment.EnvironmentName 
-            }));
+            // // Health check endpoint
+            // app.MapGet("/health", () => Results.Ok(new { 
+            //     status = "healthy", 
+            //     timestamp = DateTime.UtcNow,
+            //     environment = app.Environment.EnvironmentName 
+            // }));
 
             app.MapControllers();
 
