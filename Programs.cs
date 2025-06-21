@@ -31,13 +31,13 @@ namespace BE_Phygens
 
             // Add DbContext - lấy connection string từ environment variable
             var connectionString = Environment.GetEnvironmentVariable("ConnectDB") ?? 
-                                 Environment.GetEnvironmentVariable("ConnectDB") ?? 
+                                 Environment.GetEnvironmentVariable("DATABASE_URL") ?? 
                                  Environment.GetEnvironmentVariable("SUPABASE_CONNECTION_STRING") ??
                                  builder.Configuration.GetConnectionString("ConnectDB");
             
             if (string.IsNullOrEmpty(connectionString))
             {
-                throw new InvalidOperationException("ConnectDB, ConnectDB or SUPABASE_CONNECTION_STRING environment variable is not configured.");
+                throw new InvalidOperationException("ConnectDB, DATABASE_URL or SUPABASE_CONNECTION_STRING environment variable is not configured.");
             }
             
             // Debug: Log connection string (hide password)
@@ -50,7 +50,19 @@ namespace BE_Phygens
             {
                 try 
                 {
-                    options.UseNpgsql(connectionString);
+                    // Parse connection string and add specific options for Railway
+                    var npgsqlConnectionString = new Npgsql.NpgsqlConnectionStringBuilder(connectionString)
+                    {
+                        // Force IPv4 and add timeout settings
+                        Timeout = 30,
+                        CommandTimeout = 60,
+                        ApplicationName = "BE-Phygens-Railway",
+                        // SSL settings for Supabase
+                        SslMode = Npgsql.SslMode.Require,
+                        TrustServerCertificate = true
+                    };
+                    
+                    options.UseNpgsql(npgsqlConnectionString.ConnectionString);
                     Console.WriteLine("DbContext configured successfully");
                 }
                 catch (Exception ex)
@@ -107,6 +119,26 @@ namespace BE_Phygens
             builder.Services.AddSwaggerGen();
 
             var app = builder.Build();
+
+            // Auto-migrate database on startup (for production)
+            if (!app.Environment.IsDevelopment())
+            {
+                try
+                {
+                    using (var scope = app.Services.CreateScope())
+                    {
+                        var context = scope.ServiceProvider.GetRequiredService<PhygensContext>();
+                        Console.WriteLine("Checking database migrations...");
+                        context.Database.Migrate();
+                        Console.WriteLine("Database migrations applied successfully.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error applying migrations: {ex.Message}");
+                    // Don't throw - let app start and show error in health check
+                }
+            }
 
             // Cấu hình cho Railway - lấy port từ environment variable
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
