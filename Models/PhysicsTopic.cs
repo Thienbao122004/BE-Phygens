@@ -1,25 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class PhysicsTopic
+namespace BE_Phygens.Models
 {
-    public string TopicId { get; set; } = null!;
+    [Table("physicstopic")]
+    public class PhysicsTopic
+    {
+        [Key]
+        [Column("topicid")]
+        public string TopicId { get; set; } = string.Empty;
 
-    public string TopicName { get; set; } = null!;
+        [Required]
+        [Column("topicname")]
+        public string TopicName { get; set; } = string.Empty;
 
-    public string? Description { get; set; }
+        [Column("description")]
+        public string? Description { get; set; }
 
-    public string GradeLevel { get; set; } = null!;
+        [Required]
+        [Column("gradelevel")]
+        public string GradeLevel { get; set; } = string.Empty;
 
-    public int? DisplayOrder { get; set; }
+        [Column("displayorder")]
+        public int DisplayOrder { get; set; }
 
-    public bool? IsActive { get; set; }
+        [Column("isactive")]
+        public bool IsActive { get; set; } = true;
 
-    public DateTime? CreatedAt { get; set; }
+        [Column("createdat")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public virtual ICollection<LearningProgress> LearningProgresses { get; set; } = new List<LearningProgress>();
-
-    public virtual ICollection<Question> Questions { get; set; } = new List<Question>();
-}
+        // Navigation properties
+        public virtual ICollection<Question> Questions { get; set; } = new List<Question>();
+        public virtual ICollection<LearningProgress> LearningProgresses { get; set; } = new List<LearningProgress>();
+    }
+} 

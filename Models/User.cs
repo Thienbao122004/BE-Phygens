@@ -1,33 +1,47 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class User
+namespace BE_Phygens.Models
 {
-    public string UserId { get; set; }
+    [Table("User")]
+    public class User
+    {
+        [Key]
+        [Column("userid")]
+        public string UserId { get; set; } = string.Empty;
 
-    public string Username { get; set; } = null!;
+        [Required]
+        [Column("username")]
+        public string Username { get; set; } = string.Empty;
 
-    public string Email { get; set; } = null!;
+        [Required]
+        [EmailAddress]
+        [Column("email")]
+        public string Email { get; set; } = string.Empty;
 
-    public string FullName { get; set; } = null!;
+        [Required]
+        [Column("fullname")]
+        public string FullName { get; set; } = string.Empty;
 
-    public string Role { get; set; } = null!;
+        [Required]
+        [Column("role")]
+        public string Role { get; set; } = string.Empty; // teacher, student, admin
 
-    public string PasswordHash { get; set; } = null!;
+        [Required]
+        [Column("passwordhash")]
+        public string PasswordHash { get; set; } = string.Empty;
 
-    public DateTime? CreatedAt { get; set; }
+        [Column("createdat")]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public bool? IsActive { get; set; }
+        [Column("isactive")]
+        public bool IsActive { get; set; } = true;
 
-    public virtual ICollection<Exam> Exams { get; set; } = new List<Exam>();
-
-    public virtual ICollection<Explanation> Explanations { get; set; } = new List<Explanation>();
-
-    public virtual ICollection<LearningProgress> LearningProgresses { get; set; } = new List<LearningProgress>();
-
-    public virtual ICollection<Question> Questions { get; set; } = new List<Question>();
-
-    public virtual ICollection<StudentAttempt> StudentAttempts { get; set; } = new List<StudentAttempt>();
-}
+        // Navigation properties
+        public virtual ICollection<Exam> CreatedExams { get; set; } = new List<Exam>();
+        public virtual ICollection<Question> CreatedQuestions { get; set; } = new List<Question>();
+        public virtual ICollection<Explanation> CreatedExplanations { get; set; } = new List<Explanation>();
+        public virtual ICollection<StudentAttempt> StudentAttempts { get; set; } = new List<StudentAttempt>();
+        public virtual ICollection<LearningProgress> LearningProgresses { get; set; } = new List<LearningProgress>();
+    }
+} 

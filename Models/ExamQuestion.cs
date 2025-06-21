@@ -1,23 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace BE_Phygens.Models;
-
-public partial class ExamQuestion
+namespace BE_Phygens.Models
 {
-    public string ExamQuestionId { get; set; } = null!;
+    [Table("examquestion")]
+    public class ExamQuestion
+    {
+        [Key]
+        [Column("examquestionid")]
+        public string ExamQuestionId { get; set; } = string.Empty;
 
-    public string ExamId { get; set; } = null!;
+        [Required]
+        [Column("examid")]
+        public string ExamId { get; set; } = string.Empty;
 
-    public string QuestionId { get; set; } = null!;
+        [Required]
+        [Column("questionid")]
+        public string QuestionId { get; set; } = string.Empty;
 
-    public int? QuestionOrder { get; set; }
+        [Column("questionorder")]
+        public int? QuestionOrder { get; set; }
 
-    public decimal? PointsWeight { get; set; }
+        [Column("pointsweight")]
+        public decimal PointsWeight { get; set; } = 1.0m;
 
-    public DateTime? AddedAt { get; set; }
+        [Column("addedat")]
+        public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 
-    public virtual Exam Exam { get; set; } = null!;
+        // Navigation properties
+        [ForeignKey("ExamId")]
+        public virtual Exam Exam { get; set; } = null!;
 
-    public virtual Question Question { get; set; } = null!;
-}
+        [ForeignKey("QuestionId")]
+        public virtual Question Question { get; set; } = null!;
+    }
+} 

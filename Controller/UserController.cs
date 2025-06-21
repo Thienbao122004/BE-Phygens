@@ -7,6 +7,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using BE_Phygens;
 using BE_Phygens.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -15,7 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
-namespace WebAPI_FlowerShopSWP.Controllers
+namespace BE_Phygens.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -25,7 +26,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IConfiguration _configuration;
 
-        public UsersController(PhygensContext context, IConfiguration configuration,  IWebHostEnvironment webHostEnvironment)
+        public UsersController(PhygensContext context, IConfiguration configuration, IWebHostEnvironment webHostEnvironment)
         {
             _context = context;
             _configuration = configuration;
@@ -286,7 +287,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
         [Authorize]
         [HttpPut("profile")]
-        public async Task<IActionResult> UpdateUserProfile([FromForm] string FullName, [FromForm] string Email )
+        public async Task<IActionResult> UpdateUserProfile([FromForm] string FullName, [FromForm] string Email)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             var user = await _context.Users.FindAsync(userId);
@@ -347,10 +348,10 @@ namespace WebAPI_FlowerShopSWP.Controllers
 
 
 
-        
 
-      
-        
+
+
+
 
         // POST: api/Users
         [HttpPost]
@@ -369,7 +370,7 @@ namespace WebAPI_FlowerShopSWP.Controllers
             public string Email { get; set; }
         }
         [HttpPost("forgot-password")]
-       
+
         private string GenerateRandomPassword()
         {
             return Guid.NewGuid().ToString("N").Substring(0, 8);

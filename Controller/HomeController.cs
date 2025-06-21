@@ -8,9 +8,10 @@ using Google.Apis.Auth.OAuth2;
 using Google.Apis.Oauth2.v2;
 using Google.Apis.Oauth2.v2.Data;
 using Google.Apis.Services;
+using BE_Phygens;
 using BE_Phygens.Models;
 
-namespace WebAPI_FlowerShopSWP.Controllers
+namespace BE_Phygens.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
