@@ -365,7 +365,7 @@ namespace BE_Phygens.Services
 
         private async Task<QuestionDto> GenerateWithOpenAIAsync(Chapter chapter, GenerateQuestionRequest request)
         {
-            var apiKey = _configuration["AI:OpenAI:ApiKey"];
+            var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _configuration["AI:OpenAI:ApiKey"];
             if (string.IsNullOrEmpty(apiKey))
             {
                 throw new InvalidOperationException("OpenAI API key not configured");
@@ -379,7 +379,7 @@ namespace BE_Phygens.Services
 
         private async Task<QuestionDto> GenerateWithGeminiAsync(Chapter chapter, GenerateQuestionRequest request)
         {
-            var apiKey = _configuration["AI:Gemini:ApiKey"];
+            var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? _configuration["AI:Gemini:ApiKey"];
             if (string.IsNullOrEmpty(apiKey))
             {
                 throw new InvalidOperationException("Gemini API key not configured");
@@ -407,7 +407,7 @@ namespace BE_Phygens.Services
 
         private async Task<string> CallOpenAIAsync(string prompt)
         {
-            var apiKey = _configuration["AI:OpenAI:ApiKey"];
+            var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _configuration["AI:OpenAI:ApiKey"];
             var model = _configuration["AI:OpenAI:Model"] ?? "gpt-3.5-turbo";
             var maxTokens = _configuration.GetValue<int>("AI:OpenAI:MaxTokens", 2048);
             var temperature = _configuration.GetValue<double>("AI:OpenAI:Temperature", 0.7);
@@ -441,7 +441,7 @@ namespace BE_Phygens.Services
 
         private async Task<string> CallGeminiAsync(string prompt)
         {
-            var apiKey = _configuration["AI:Gemini:ApiKey"];
+            var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? _configuration["AI:Gemini:ApiKey"];
             var model = _configuration["AI:Gemini:Model"] ?? "gemini-1.5-flash";
 
             var requestBody = new
@@ -484,7 +484,7 @@ namespace BE_Phygens.Services
 
         private async Task<string> CallClaudeAsync(string prompt)
         {
-            var apiKey = _configuration["AI:Claude:ApiKey"];
+            var apiKey = Environment.GetEnvironmentVariable("CLAUDE_API_KEY") ?? _configuration["AI:Claude:ApiKey"];
             var model = _configuration["AI:Claude:Model"] ?? "claude-3-sonnet-20240229";
             var maxTokens = _configuration.GetValue<int>("AI:Claude:MaxTokens", 2048);
 
