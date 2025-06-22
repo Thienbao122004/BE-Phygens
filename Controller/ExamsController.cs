@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 namespace BE_Phygens.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("[controller]")]
     public class ExamsController : ControllerBase
     {
         private readonly PhygensContext _context;
@@ -20,7 +20,7 @@ namespace BE_Phygens.Controllers
             _context = context;
         }
 
-        // GET: api/exams
+        // GET: exams
         [HttpGet]
         public async Task<IActionResult> GetAllExams()
         {
@@ -72,7 +72,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        // GET: api/exams/{id}
+        // GET: exams/{id}
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExamById(string id)
         {
@@ -112,7 +112,7 @@ namespace BE_Phygens.Controllers
             return Ok(examDto);
         }
 
-        // POST: api/exams
+        // POST: exams
         [HttpPost]
         public async Task<IActionResult> CreateExam([FromBody] ExamCreateDto examDto)
         {
@@ -152,7 +152,7 @@ namespace BE_Phygens.Controllers
             return CreatedAtAction(nameof(GetExamById), new { id = exam.ExamId }, exam);
         }
 
-        // PUT: api/exams/{id}
+        // PUT: exams/{id}
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateExam(string id, [FromBody] ExamUpdateDto examDto)
         {
@@ -193,7 +193,7 @@ namespace BE_Phygens.Controllers
             return NoContent();
         }
 
-        // DELETE: api/exams/{id}
+        // DELETE: exams/{id}
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteExam(string id)
         {
@@ -211,7 +211,7 @@ namespace BE_Phygens.Controllers
             return NoContent();
         }
 
-        // POST: api/exams/generate
+        // POST: exams/generate
         [HttpPost("generate")]
         public async Task<IActionResult> GenerateExam([FromBody] ExamGenerateDto generateDto)
         {

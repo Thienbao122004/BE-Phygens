@@ -6,7 +6,7 @@ using BE_Phygens.Dto;
 
 namespace BE_Phygens.Controllers
 {
-    [Route("api/analytics")]
+    [Route("analytics")]
     [ApiController]
     [Authorize]
     public class AnalyticsController : ControllerBase

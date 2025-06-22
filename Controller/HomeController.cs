@@ -1,103 +1,112 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Oauth2.v2;
-using Google.Apis.Oauth2.v2.Data;
-using Google.Apis.Services;
-using BE_Phygens;
 using BE_Phygens.Models;
+using BE_Phygens.Services;
+using BE_Phygens.Dto;
 
 namespace BE_Phygens.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("[controller]")]
     [ApiController]
     public class LoginGoogleController : ControllerBase
     {
         private readonly PhygensContext _context;
-        private readonly IConfiguration _configuration;
+        private readonly IJwtService _jwtService;
         private readonly ILogger<LoginGoogleController> _logger;
 
-        public LoginGoogleController(PhygensContext context, IConfiguration configuration, ILogger<LoginGoogleController> logger)
+        public LoginGoogleController(PhygensContext context, IJwtService jwtService, ILogger<LoginGoogleController> logger)
         {
             _context = context;
-            _configuration = configuration;
+            _jwtService = jwtService;
             _logger = logger;
         }
 
-        public class GoogleLoginRequest
+        public class FirebaseLoginRequest
         {
-            public string? AccessToken { get; set; }
+            public string? IdToken { get; set; }
+            public string? Email { get; set; }
+            public string? FullName { get; set; }
         }
 
-        [HttpPost("google-login")]
-        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+        /// <summary>
+        /// Firebase/Google login - Xử lý đăng nhập từ Firebase Authentication
+        /// </summary>
+        [HttpPost("firebase-login")]
+        public async Task<ActionResult<ApiResponse<LoginResponseDto>>> FirebaseLogin([FromBody] FirebaseLoginRequest request)
         {
             try
             {
-                if (string.IsNullOrEmpty(request.AccessToken))
+                if (string.IsNullOrEmpty(request.Email))
                 {
-                    return BadRequest("Access token is required");
+                    return BadRequest(ApiResponse<object>.ErrorResult("Email is required"));
                 }
-                _logger.LogInformation($"Received Access token: {request.AccessToken}");
+                
+                _logger.LogInformation($"Firebase login for: {request.Email}");
 
-                var userInfoClient = new Oauth2Service(new BaseClientService.Initializer
-                {
-                    HttpClientInitializer = GoogleCredential.FromAccessToken(request.AccessToken)
-                });
-                var userInfo = await userInfoClient.Userinfo.Get().ExecuteAsync();
-
-                // Find user
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userInfo.Email);
+                // Find user by email
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
 
                 if (user == null)
                 {
-                    _logger.LogInformation($"New user detected: {userInfo.Email}");
-                    return Ok(new
+                    _logger.LogInformation($"New user detected: {request.Email}");
+                    return Ok(ApiResponse<object>.SuccessResult(new
                     {
                         IsNewUser = true,
-                        Email = userInfo.Email,
-                        Name = userInfo.Name
-                    });
+                        Email = request.Email,
+                        Name = request.FullName
+                    }, "New user detected, registration required"));
                 }
 
                 _logger.LogInformation($"Existing user found: {user.Email}, UserId: {user.UserId}");
-                var token = GenerateJwtToken(user);
-                return Ok(new
-                {
-                    IsNewUser = false,
-                    Token = token,
-                    User = new { user.UserId, user.Username, user.Email }
-                });
+                
+                // Sử dụng IJwtService thay vì tự implement
+                var loginResponse = await _jwtService.GenerateTokenAsync(user);
+                
+                return Ok(ApiResponse<LoginResponseDto>.SuccessResult(
+                    loginResponse, "Firebase login successful"));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred during Google authentication");
-                return StatusCode(500, $"An error occurred during authentication: {ex.Message}");
+                _logger.LogError(ex, "An error occurred during Firebase authentication");
+                return StatusCode(500, ApiResponse<object>.ErrorResult(
+                    "An error occurred during authentication", new List<string> { ex.Message }));
             }
         }
 
+        /// <summary>
+        /// Hoàn tất đăng ký cho user mới từ Google/Firebase
+        /// </summary>
         [HttpPost("complete-registration")]
-        public async Task<IActionResult> CompleteRegistration([FromBody] CompleteRegistrationRequest request)
+        public async Task<ActionResult<ApiResponse<LoginResponseDto>>> CompleteRegistration([FromBody] CompleteRegistrationRequest request)
         {
             try
             {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState
+                        .SelectMany(x => x.Value!.Errors)
+                        .Select(x => x.ErrorMessage)
+                        .ToList();
+                    return BadRequest(ApiResponse<object>.ErrorResult("Validation failed", errors));
+                }
+
                 _logger.LogInformation($"Completing registration for: {request.Email}");
 
-                // Sinh UserId mới dạng GUID
-                var newUserId = Guid.NewGuid().ToString();
+                // Check if user already exists
+                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+                if (existingUser != null)
+                {
+                    return BadRequest(ApiResponse<object>.ErrorResult("User already exists"));
+                }
 
                 var user = new User
                 {
-                    UserId = newUserId, // Gán UserId mới dạng string
+                    UserId = Guid.NewGuid().ToString(),
                     Email = request.Email,
                     FullName = request.FullName,
-                    Username = request.Email.Split('@')[0],
-                    PasswordHash = string.Empty, // Fix: không được null
-                    Role = "student", // Fix: thêm role mặc định
+                    Username = request.Email.Split('@')[0], // Generate username from email
+                    PasswordHash = string.Empty, // Google users don't have password
+                    Role = "student", // Default role
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -106,60 +115,27 @@ namespace BE_Phygens.Controllers
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation($"New user created: {user.Email}, UserId: {user.UserId}");
-                var token = GenerateJwtToken(user);
-                return Ok(new
-                {
-                    Token = token,
-                    User = new { user.UserId, user.FullName, user.Username, user.Email }
-                });
+                
+                // Sử dụng IJwtService
+                var loginResponse = await _jwtService.GenerateTokenAsync(user);
+                
+                return Ok(ApiResponse<LoginResponseDto>.SuccessResult(
+                    loginResponse, "Registration completed successfully"));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during user registration");
-                return StatusCode(500, $"An error occurred during registration: {ex.Message}");
+                return StatusCode(500, ApiResponse<object>.ErrorResult(
+                    "An error occurred during registration", new List<string> { ex.Message }));
             }
-        }
-        public class CompleteRegistrationRequest
-        {
-            public string Email { get; set; }
-            public string FullName { get; set; }
-            public string Phone { get; set; }
-            public string Address { get; set; }
         }
 
-        private string GenerateJwtToken(User user)
+        public class CompleteRegistrationRequest
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            // Sử dụng cùng logic như trong Programs.cs để lấy JWT key
-            var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
-                           Environment.GetEnvironmentVariable("JWT_KEY") ?? 
-                           _configuration["Jwt:SecretKey"];
-            
-            if (string.IsNullOrEmpty(secretKey))
-            {
-                throw new InvalidOperationException("JWT_KEY or JWT_SECRET_KEY environment variable is not configured.");
-            }
-            
-            var key = Encoding.ASCII.GetBytes(secretKey);
-            
-            // Lấy issuer và audience từ environment variables như trong Programs.cs
-            var issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
-            var audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
-            
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
-                    new Claim(ClaimTypes.Email, user.Email),
-                }),
-                Expires = DateTime.UtcNow.AddDays(7),
-                Issuer = issuer,
-                Audience = audience,
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return tokenHandler.WriteToken(token);
+            public string Email { get; set; } = string.Empty;
+            public string FullName { get; set; } = string.Empty;
+            public string? Phone { get; set; }
+            public string? Address { get; set; }
         }
     }
 }

@@ -11,7 +11,7 @@ using System.Text;
 namespace BE_Phygens.Controllers
 {
     [ApiController]
-    [Route("api/users")]
+    [Route("users")]
     [Produces("application/json")]
     public class UsersController : ControllerBase
     {

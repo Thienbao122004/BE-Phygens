@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -90,7 +89,7 @@ namespace BE_Phygens
             })
             .AddCookie(options =>
             {
-                options.LoginPath = "/api/LoginGoogle/login-google";
+                options.LoginPath = "/LoginGoogle/login-google";
                 options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
             })
             .AddJwtBearer(options =>
@@ -109,22 +108,21 @@ namespace BE_Phygens
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
-            })
-            .AddGoogle(googleOptions =>
-            {
-                googleOptions.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? 
-                                        builder.Configuration["Authentication:Google:ClientId"];
-                googleOptions.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? 
-                                            builder.Configuration["Authentication:Google:ClientSecret"];
-                googleOptions.CallbackPath = "/api/LoginGoogle/google-callback";
             });
-
             // Authorization (nếu bạn cần Role-based policy)
             builder.Services.AddAuthorization();
 
             // Register custom services
             builder.Services.AddScoped<IJwtService, JwtService>();
-builder.Services.AddHttpClient(); // For OpenAI API calls
+            
+            // Add HttpClient for AI services
+            builder.Services.AddHttpClient();
+            
+            // Add Memory Cache for AI response caching
+            builder.Services.AddMemoryCache();
+            
+            // Register AI Service
+            builder.Services.AddScoped<BE_Phygens.Services.IAIService, BE_Phygens.Services.AIService>();
 
             // Add CORS
             builder.Services.AddCors(options =>
