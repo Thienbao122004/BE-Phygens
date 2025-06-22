@@ -41,9 +41,10 @@ namespace BE_Phygens.Services
             var claims = new List<Claim>
             {
                 new(ClaimTypes.NameIdentifier, user.UserId),
-                new(ClaimTypes.Name, user.Username),
                 new(ClaimTypes.Email, user.Email),
+                new(ClaimTypes.Name, user.FullName),
                 new(ClaimTypes.Role, user.Role),
+                new("username", user.Username),
                 new("full_name", user.FullName),
                 new("is_active", user.IsActive.ToString()),
                 new("jti", Guid.NewGuid().ToString()), // Token ID for revocation

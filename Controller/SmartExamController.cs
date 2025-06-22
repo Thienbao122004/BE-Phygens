@@ -6,7 +6,7 @@ using BE_Phygens.Dto;
 
 namespace BE_Phygens.Controllers
 {
-    [Route("api/smart-exam")]
+    [Route("smart-exam")]
     [ApiController]
     [Authorize]
     public class SmartExamController : ControllerBase

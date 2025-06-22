@@ -3,29 +3,31 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using BE_Phygens.Models;
 using BE_Phygens.Dto;
+using BE_Phygens.Services;
 using System.Text.Json;
 using System.Text;
 
 namespace BE_Phygens.Controllers
 {
-    [Route("api/ai-question")]
+    [Route("ai-question")]
     [ApiController]
     [Authorize]
     public class AIQuestionController : ControllerBase
     {
         private readonly PhygensContext _context;
-        private readonly IConfiguration _configuration;
-        private readonly HttpClient _httpClient;
+        private readonly IAIService _aiService;
         private readonly ILogger<AIQuestionController> _logger;
 
-        public AIQuestionController(PhygensContext context, IConfiguration configuration, HttpClient httpClient, ILogger<AIQuestionController> logger)
+        public AIQuestionController(PhygensContext context, IAIService aiService, ILogger<AIQuestionController> logger)
         {
             _context = context;
-            _configuration = configuration;
-            _httpClient = httpClient;
+            _aiService = aiService;
             _logger = logger;
         }
 
+        /// <summary>
+        /// Generate AI question using real AI service (OpenAI/Gemini)
+        /// </summary>
         [HttpPost("generate")]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> GenerateQuestion([FromBody] GenerateQuestionRequest request)
         {
@@ -42,8 +44,14 @@ namespace BE_Phygens.Controllers
                         Message = "Chapter không tồn tại" 
                     });
 
-                // For demo - create mock AI question
-                var questionDto = CreateMockQuestion(chapter, request);
+                // Generate question using AI service
+                var questionDto = await _aiService.GenerateQuestionAsync(chapter, request);
+
+                // Save to database if requested
+                if (request.SaveToDatabase)
+                {
+                    await SaveQuestionToDatabase(questionDto);
+                }
 
                 return Ok(new ApiResponse<QuestionDto>
                 {
@@ -59,6 +67,213 @@ namespace BE_Phygens.Controllers
                 {
                     Success = false,
                     Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Generate multiple questions in batch
+        /// </summary>
+        [HttpPost("generate-batch")]
+        public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GenerateBatchQuestions([FromBody] BatchGenerateRequest request)
+        {
+            try
+            {
+                var questions = new List<QuestionDto>();
+                
+                foreach (var spec in request.QuestionSpecs)
+                {
+                    var chapter = await _context.Set<Chapter>()
+                        .FirstOrDefaultAsync(c => c.ChapterId == spec.ChapterId && c.IsActive);
+                    
+                    if (chapter == null) continue;
+
+                    for (int i = 0; i < spec.Count; i++)
+                    {
+                        var questionRequest = new GenerateQuestionRequest
+                        {
+                            ChapterId = spec.ChapterId,
+                            DifficultyLevel = spec.DifficultyLevel,
+                            QuestionType = spec.QuestionType,
+                            SpecificTopic = spec.SpecificTopic,
+                            SaveToDatabase = request.SaveToDatabase
+                        };
+
+                        var question = await _aiService.GenerateQuestionAsync(chapter, questionRequest);
+                        questions.Add(question);
+
+                        // Add delay to avoid rate limiting
+                        await Task.Delay(1000);
+                    }
+                }
+
+                return Ok(new ApiResponse<List<QuestionDto>>
+                {
+                    Success = true,
+                    Message = $"Tạo thành công {questions.Count} câu hỏi",
+                    Data = questions
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating batch questions");
+                return StatusCode(500, new ApiResponse<List<QuestionDto>>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Analyze and improve existing question using AI
+        /// </summary>
+        [HttpPost("improve/{questionId}")]
+        public async Task<ActionResult<ApiResponse<QuestionDto>>> ImproveQuestion(string questionId, [FromBody] ImproveQuestionRequest request)
+        {
+            try
+            {
+                var existingQuestion = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+                if (existingQuestion == null)
+                    return NotFound(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = "Câu hỏi không tồn tại"
+                    });
+
+                var improvedQuestion = await _aiService.ImproveQuestionAsync(existingQuestion, request);
+
+                return Ok(new ApiResponse<QuestionDto>
+                {
+                    Success = true,
+                    Message = "Cải thiện câu hỏi thành công",
+                    Data = improvedQuestion
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error improving question");
+                return StatusCode(500, new ApiResponse<QuestionDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get AI suggestions for question topics
+        /// </summary>
+        [HttpPost("suggest-topics")]
+        public async Task<ActionResult<ApiResponse<List<TopicSuggestionDto>>>> SuggestTopics([FromBody] TopicSuggestionRequest request)
+        {
+            try
+            {
+                var chapter = await _context.Set<Chapter>()
+                    .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId);
+
+                if (chapter == null)
+                    return BadRequest(new ApiResponse<List<TopicSuggestionDto>>
+                    {
+                        Success = false,
+                        Message = "Chapter không tồn tại"
+                    });
+
+                var suggestions = await _aiService.GetTopicSuggestionsAsync(chapter, request);
+
+                return Ok(new ApiResponse<List<TopicSuggestionDto>>
+                {
+                    Success = true,
+                    Message = "Lấy gợi ý chủ đề thành công",
+                    Data = suggestions
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting topic suggestions");
+                return StatusCode(500, new ApiResponse<List<TopicSuggestionDto>>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Validate question quality using AI
+        /// </summary>
+        [HttpPost("validate/{questionId}")]
+        public async Task<ActionResult<ApiResponse<QuestionValidationDto>>> ValidateQuestion(string questionId)
+        {
+            try
+            {
+                var question = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+                if (question == null)
+                    return NotFound(new ApiResponse<QuestionValidationDto>
+                    {
+                        Success = false,
+                        Message = "Câu hỏi không tồn tại"
+                    });
+
+                var validation = await _aiService.ValidateQuestionAsync(question);
+
+                return Ok(new ApiResponse<QuestionValidationDto>
+                {
+                    Success = true,
+                    Message = "Kiểm tra chất lượng câu hỏi thành công",
+                    Data = validation
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating question");
+                return StatusCode(500, new ApiResponse<QuestionValidationDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Test AI connection and capabilities
+        /// </summary>
+        [HttpPost("test-connection")]
+        [Authorize(Roles = "admin")]
+        public async Task<ActionResult<ApiResponse<object>>> TestAIConnection()
+        {
+            try
+            {
+                var isConnected = await _aiService.TestAIConnectionAsync();
+                var config = await _aiService.GetAIStatusAsync();
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = isConnected,
+                    Message = isConnected ? "Kết nối AI thành công" : "Không thể kết nối AI",
+                    Data = new
+                    {
+                        Connected = isConnected,
+                        Provider = config.Provider,
+                        Model = config.Model,
+                        IsConfigured = config.IsConfigured,
+                        Features = config.SupportedFeatures
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error testing AI connection");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Lỗi test kết nối AI: {ex.Message}"
                 });
             }
         }
@@ -92,64 +307,112 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        private QuestionDto CreateMockQuestion(Chapter chapter, GenerateQuestionRequest request)
+        /// <summary>
+        /// Get AI configuration and status
+        /// </summary>
+        [HttpGet("config")]
+        [Authorize(Roles = "admin")]
+        public async Task<ActionResult<ApiResponse<AIConfigDto>>> GetAIConfig()
         {
-            var questionId = Guid.NewGuid().ToString();
-            
-            // Mock questions based on chapter and difficulty
-            var mockQuestions = GetMockQuestionsByChapter(chapter, request.DifficultyLevel);
-            var random = new Random();
-            var selectedQuestion = mockQuestions[random.Next(mockQuestions.Count)];
-
-            return new QuestionDto
+            try
             {
-                QuestionId = questionId,
-                Topic = chapter.ChapterName,
-                QuestionText = selectedQuestion.Question,
-                QuestionType = request.QuestionType,
-                Difficulty = request.DifficultyLevel,
-                ImageUrl = "",
-                CreatedBy = "AI_System",
-                CreatedAt = DateTime.UtcNow,
-                AnswerChoices = selectedQuestion.Choices.Select((choice, index) => new AnswerChoiceDto
+                var config = await _aiService.GetAIStatusAsync();
+
+                return Ok(new ApiResponse<AIConfigDto>
                 {
-                    ChoiceId = Guid.NewGuid().ToString(),
-                    ChoiceLabel = ((char)('A' + index)).ToString(),
-                    ChoiceText = choice
-                }).ToList()
-            };
+                    Success = true,
+                    Message = "Lấy cấu hình AI thành công",
+                    Data = config
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting AI config");
+                return StatusCode(500, new ApiResponse<AIConfigDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
         }
 
-        private List<MockQuestion> GetMockQuestionsByChapter(Chapter chapter, string difficulty)
+        #region Helper Methods
+
+        private async Task SaveQuestionToDatabase(QuestionDto questionDto)
         {
-            return chapter.ChapterName.ToLower() switch
+            var question = new Question
             {
-                "cơ học" when difficulty == "easy" => new List<MockQuestion>
-                {
-                    new() { Question = "Chuyển động thẳng đều có đặc điểm gì?", Choices = new[] { "Vận tốc không đổi", "Gia tốc không đổi", "Lực không đổi", "Quãng đường không đổi" }},
-                    new() { Question = "Đơn vị của vận tốc trong hệ SI là gì?", Choices = new[] { "m/s", "km/h", "m/s²", "N" }}
-                },
-                "cơ học" when difficulty == "medium" => new List<MockQuestion>
-                {
-                    new() { Question = "Một vật chuyển động thẳng đều với vận tốc 20 m/s. Quãng đường vật đi được trong 5s là?", Choices = new[] { "100m", "25m", "4m", "15m" }},
-                    new() { Question = "Công thức tính động năng là?", Choices = new[] { "Ek = 1/2mv²", "Ek = mgh", "Ek = Fs", "Ek = mv" }}
-                },
-                "nhiệt học" when difficulty == "easy" => new List<MockQuestion>
-                {
-                    new() { Question = "Đơn vị của nhiệt độ trong hệ SI là gì?", Choices = new[] { "Kelvin (K)", "Celsius (°C)", "Fahrenheit (°F)", "Joule (J)" }},
-                    new() { Question = "Quá trình nào sau đây là đẳng tích?", Choices = new[] { "Thể tích không đổi", "Áp suất không đổi", "Nhiệt độ không đổi", "Khối lượng không đổi" }}
-                },
-                _ => new List<MockQuestion>
-                {
-                    new() { Question = $"Câu hỏi mẫu về {chapter.ChapterName} - độ khó {difficulty}", Choices = new[] { "Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D" }}
-                }
+                QuestionId = questionDto.QuestionId,
+                QuestionText = questionDto.QuestionText,
+                QuestionType = questionDto.QuestionType,
+                DifficultyLevel = questionDto.Difficulty,
+                TopicId = questionDto.Topic, // Use TopicId instead of Topic
+                ImageUrl = questionDto.ImageUrl,
+                CreatedBy = questionDto.CreatedBy,
+                CreatedAt = questionDto.CreatedAt,
+                IsActive = true
             };
+
+            _context.Questions.Add(question);
+
+            foreach (var choice in questionDto.AnswerChoices)
+            {
+                var answerChoice = new AnswerChoice
+                {
+                    ChoiceId = choice.ChoiceId,
+                    QuestionId = questionDto.QuestionId,
+                    ChoiceLabel = choice.ChoiceLabel,
+                    ChoiceText = choice.ChoiceText,
+                    IsCorrect = choice.IsCorrect,
+                    DisplayOrder = choice.DisplayOrder
+                };
+                _context.AnswerChoices.Add(answerChoice);
+            }
+
+            await _context.SaveChangesAsync();
         }
+
+        #endregion
+
+        #region Helper Classes
 
         private class MockQuestion
         {
             public string Question { get; set; } = "";
             public string[] Choices { get; set; } = Array.Empty<string>();
         }
+
+        private class OpenAIResponse
+        {
+            public OpenAIChoice[]? Choices { get; set; }
+        }
+
+        private class OpenAIChoice
+        {
+            public OpenAIMessage? Message { get; set; }
+        }
+
+        private class OpenAIMessage
+        {
+            public string? Content { get; set; }
+        }
+
+        private class AIQuestionResponse
+        {
+            public string? Question { get; set; }
+            public AIChoiceResponse[]? Choices { get; set; }
+            public string? Explanation { get; set; }
+            public string? Difficulty { get; set; }
+            public string? Topic { get; set; }
+        }
+
+        private class AIChoiceResponse
+        {
+            public string Label { get; set; } = "";
+            public string Text { get; set; } = "";
+            public bool IsCorrect { get; set; }
+        }
+
+        #endregion
     }
 } 
