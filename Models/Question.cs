@@ -14,13 +14,9 @@ namespace BE_Phygens.Models
         [Column("topicid")]
         public string TopicId { get; set; } = string.Empty;
 
-        // Helper property to bridge TopicId with ChapterId for new features
-        [NotMapped]
-        public int? ChapterId
-        {
-            get => int.TryParse(TopicId, out var id) ? id : null;
-            set => TopicId = value?.ToString() ?? "";
-        }
+        // Map to actual ChapterId column in database (from previous migration)
+        [Column("ChapterId")]
+        public int? ChapterId { get; set; }
 
         [Required]
         [Column("questiontext")]
@@ -46,6 +42,37 @@ namespace BE_Phygens.Models
 
         [Column("isactive")]
         public bool IsActive { get; set; } = true;
+
+        // AI-related properties
+        [Column("aigenerated")]
+        public bool AiGenerated { get; set; } = false;
+
+        [Column("aiprovider")]
+        public string? AiProvider { get; set; }
+
+        [Column("aimodel")]
+        public string? AiModel { get; set; }
+
+        [Column("aipromptused")]
+        public string? AiPromptUsed { get; set; }
+
+        [Column("aigenerationmetadata")]
+        public string? AiGenerationMetadata { get; set; } // JSON string
+
+        [Column("qualityscore")]
+        public decimal? QualityScore { get; set; }
+
+        [Column("aivalidationstatus")]
+        public string AiValidationStatus { get; set; } = "pending"; // pending, validated, needsReview, rejected
+
+        [Column("specifictopic")]
+        public string? SpecificTopic { get; set; }
+
+        [Column("tags")]
+        public string[]? Tags { get; set; }
+
+        [Column("explanation")]
+        public string? Explanation { get; set; }
 
         // Navigation properties
         [ForeignKey("TopicId")]
