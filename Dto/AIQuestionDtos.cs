@@ -56,7 +56,7 @@ namespace BE_Phygens.Dto
         public decimal TotalPoints { get; set; }
         public List<ExamQuestionDto> Questions { get; set; } = new();
     }
-         
+
     public class ExamQuestionDto
     {
         public string ExamQuestionId { get; set; } = string.Empty;
@@ -99,7 +99,7 @@ namespace BE_Phygens.Dto
         public int TotalAttempts { get; set; }
         public List<RecentAttemptDto> RecentAttempts { get; set; } = new();
     }
-         
+
     public class RecentAttemptDto
     {
         public string AttemptId { get; set; } = string.Empty;
