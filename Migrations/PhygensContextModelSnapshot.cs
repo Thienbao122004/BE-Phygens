@@ -55,7 +55,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("QuestionId");
 
-                    b.ToTable("answerchoice", t =>
+                    b.ToTable("answerchoice", null, t =>
                         {
                             t.HasCheckConstraint("CK_AnswerChoice_DisplayOrder", "displayorder > 0");
                         });
@@ -99,7 +99,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasKey("ChapterId");
 
-                    b.ToTable("chapter");
+                    b.ToTable("chapter", (string)null);
                 });
 
             modelBuilder.Entity("BE_Phygens.Models.Exam", b =>
@@ -148,7 +148,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("ExamMatrixMatrixId");
 
-                    b.ToTable("exam", t =>
+                    b.ToTable("exam", null, t =>
                         {
                             t.HasCheckConstraint("CK_Exam_DurationMinutes", "durationminutes > 0");
 
@@ -213,7 +213,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasKey("MatrixId");
 
-                    b.ToTable("exammatrix", t =>
+                    b.ToTable("exammatrix", null, t =>
                         {
                             t.HasCheckConstraint("CK_ExamMatrix_NumEasy", "numeasy >= 0");
 
@@ -255,7 +255,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("ExamMatrixId");
 
-                    b.ToTable("ExamMatrixDetail");
+                    b.ToTable("ExamMatrixDetail", (string)null);
                 });
 
             modelBuilder.Entity("BE_Phygens.Models.ExamQuestion", b =>
@@ -292,7 +292,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("QuestionId");
 
-                    b.ToTable("examquestion", t =>
+                    b.ToTable("examquestion", null, t =>
                         {
                             t.HasCheckConstraint("CK_ExamQuestion_PointsWeight", "pointsweight >= 0");
 
@@ -331,7 +331,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("QuestionId");
 
-                    b.ToTable("explanations");
+                    b.ToTable("explanations", (string)null);
                 });
 
             modelBuilder.Entity("BE_Phygens.Models.LearningProgress", b =>
@@ -368,7 +368,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("learningprogress", t =>
+                    b.ToTable("learningprogress", null, t =>
                         {
                             t.HasCheckConstraint("CK_LearningProgress_Attempts", "attempts >= 0");
 
@@ -413,7 +413,7 @@ namespace BE_Phygens.Migrations
                     b.HasIndex("TopicName")
                         .IsUnique();
 
-                    b.ToTable("physicstopic", t =>
+                    b.ToTable("physicstopic", null, t =>
                         {
                             t.HasCheckConstraint("CK_PhysicsTopic_DisplayOrder", "displayorder > 0");
                         });
@@ -473,7 +473,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("TopicId");
 
-                    b.ToTable("question", t =>
+                    b.ToTable("question", null, t =>
                         {
                             t.HasCheckConstraint("CK_Question_DifficultyLevel", "difficultylevel IN ('easy', 'medium', 'hard')");
 
@@ -525,7 +525,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("SelectedChoiceId");
 
-                    b.ToTable("studentanswer", t =>
+                    b.ToTable("studentanswer", null, t =>
                         {
                             t.HasCheckConstraint("CK_StudentAnswer_PointsEarned", "pointsearned >= 0");
                         });
@@ -578,7 +578,7 @@ namespace BE_Phygens.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("studentattempt", t =>
+                    b.ToTable("studentattempt", null, t =>
                         {
                             t.HasCheckConstraint("CK_StudentAttempt_MaxScore", "maxscore > 0 AND maxscore <= 10");
 
@@ -635,7 +635,7 @@ namespace BE_Phygens.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("User", t =>
+                    b.ToTable("User", null, t =>
                         {
                             t.HasCheckConstraint("CK_User_Role", "role IN ('teacher', 'student', 'admin')");
                         });

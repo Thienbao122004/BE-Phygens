@@ -34,6 +34,19 @@ namespace BE_Phygens.Models
         [Column("createdat")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        // AI-related properties
+        [Column("isaigenerated")]
+        public bool IsAiGenerated { get; set; } = false;
+
+        [Column("aigenerationconfig")]
+        public string? AiGenerationConfig { get; set; } // JSON string
+
+        [Column("autogradingenabled")]
+        public bool AutoGradingEnabled { get; set; } = true;
+
+        [Column("adaptivedifficulty")]
+        public bool AdaptiveDifficulty { get; set; } = false;
+
         // Navigation properties
         [ForeignKey("CreatedBy")]
         public virtual User Creator { get; set; } = null!;
