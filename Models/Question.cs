@@ -14,8 +14,8 @@ namespace BE_Phygens.Models
         [Column("topicid")]
         public string TopicId { get; set; } = string.Empty;
 
-        // Map to actual ChapterId column in database (from previous migration)
-        [Column("ChapterId")]
+        // Map to actual chapterid column in database (lowercase as per PostgreSQL schema)
+        [Column("chapterid")]
         public int? ChapterId { get; set; }
 
         [Required]

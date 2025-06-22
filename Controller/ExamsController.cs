@@ -32,6 +32,7 @@ namespace BE_Phygens.Controllers
                 var exams = await _context.Exams
                     .Include(e => e.ExamQuestions)
                     .ThenInclude(eq => eq.Question)
+                    .ThenInclude(q => q.Topic)
                     .ToListAsync();
             
             var examDtos = exams.Select(e => new ExamDto
@@ -79,6 +80,7 @@ namespace BE_Phygens.Controllers
             var exam = await _context.Exams
                 .Include(e => e.ExamQuestions)
                 .ThenInclude(eq => eq.Question)
+                .ThenInclude(q => q.Topic)
                 .FirstOrDefaultAsync(e => e.ExamId == id);
 
             if (exam == null) return NotFound();

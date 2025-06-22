@@ -60,7 +60,7 @@ namespace BE_Phygens.Models
                 
                 // Explicit column mapping to prevent EF Core confusion
                 entity.Property(q => q.ChapterId)
-                    .HasColumnName("ChapterId")
+                    .HasColumnName("chapterid")
                     .HasColumnType("integer");
             });
 

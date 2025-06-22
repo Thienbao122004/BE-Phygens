@@ -33,7 +33,6 @@ namespace BE_Phygens.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation properties
-        public virtual ICollection<Question> Questions { get; set; } = new List<Question>();
         public virtual ICollection<ExamMatrixDetail> ExamMatrixDetails { get; set; } = new List<ExamMatrixDetail>();
     }
 
