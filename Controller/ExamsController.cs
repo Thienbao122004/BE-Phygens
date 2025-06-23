@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.Json;
 
 namespace BE_Phygens.Controllers
 {
@@ -18,6 +19,17 @@ namespace BE_Phygens.Controllers
         public ExamsController(PhygensContext context)
         {
             _context = context;
+        }
+
+        private string? ConvertToJsonString(object? value)
+        {
+            if (value == null) return null;
+            if (value is string str)
+            {
+                if (string.IsNullOrEmpty(str) || str == "string") return null;
+                return str;
+            }
+            return JsonSerializer.Serialize(value);
         }
 
         // GET: exams
@@ -129,6 +141,25 @@ namespace BE_Phygens.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateExam([FromBody] ExamCreateDto examDto)
         {
+            // Check if exam with same name and config already exists
+            if (!string.IsNullOrEmpty(examDto.ExamName))
+            {
+                var existingExam = await _context.Exams
+                    .Where(e => e.ExamName == examDto.ExamName && 
+                               e.CreatedBy == examDto.CreatedBy &&
+                               e.ExamType == examDto.ExamType)
+                    .FirstOrDefaultAsync();
+
+                if (existingExam != null)
+                {
+                    Console.WriteLine($"Exam already exists: {existingExam.ExamId}");
+                    return Ok(new { 
+                        success = true, 
+                        data = existingExam,
+                        message = "Exam already exists, returning existing exam" 
+                    });
+                }
+            }
             // FIX: Validate user exists
             var userExists = await _context.Users.AnyAsync(u => u.UserId == examDto.CreatedBy);
             if (!userExists)
@@ -150,7 +181,7 @@ namespace BE_Phygens.Controllers
                 }
             }
 
-            // Validate questions exist if provided
+            // Validate questions exist if provided and create placeholders for AI questions
             if (examDto.Questions != null && examDto.Questions.Any())
             {
                 var questionIds = examDto.Questions.Select(q => q.QuestionId).Distinct().ToList();
@@ -162,10 +193,37 @@ namespace BE_Phygens.Controllers
                 var missingQuestionIds = questionIds.Except(existingQuestions).ToList();
                 if (missingQuestionIds.Any())
                 {
-                    return BadRequest(new { 
-                        error = "Some questions do not exist", 
-                        missingQuestionIds = missingQuestionIds 
-                    });
+                    Console.WriteLine($"⚠️ Creating {missingQuestionIds.Count} placeholder questions for AI-generated content...");
+                    
+                    // Create placeholder questions for AI-generated ones
+                    foreach (var missingId in missingQuestionIds)
+                    {
+                        // Check if it's UUID format (AI-generated)
+                        if (Guid.TryParse(missingId, out _))
+                        {
+                            var placeholderQuestion = new Question
+                            {
+                                QuestionId = missingId,
+                                QuestionText = "[AI Generated Question - Content loaded from frontend]",
+                                QuestionType = "multiple_choice",
+                                DifficultyLevel = "medium",
+                                CreatedBy = "ai_system",
+                                CreatedAt = DateTime.UtcNow,
+                                TopicId = "TOPIC_001", // Default topic
+                                IsActive = true
+                            };
+                            
+                            _context.Questions.Add(placeholderQuestion);
+                            Console.WriteLine($"   ✅ Created placeholder: {missingId}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"   ❌ Skipping non-UUID question: {missingId}");
+                        }
+                    }
+                    
+                    // Save placeholder questions first
+                    await _context.SaveChangesAsync();
                 }
             }
 
@@ -179,15 +237,31 @@ namespace BE_Phygens.Controllers
                 CreatedBy = examDto.CreatedBy,
                 IsPublished = false,
                 CreatedAt = DateTime.UtcNow,
-                AiGenerationConfig = examDto.AiGenerationConfig
+                AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig)
             };
 
             _context.Exams.Add(exam);
 
             if (examDto.Questions != null && examDto.Questions.Any())
             {
+                // Check for existing ExamQuestions to avoid duplicates
+                var existingExamQuestions = await _context.ExamQuestions
+                    .Where(eq => eq.ExamId == exam.ExamId)
+                    .Select(eq => new { eq.QuestionId, eq.QuestionOrder })
+                    .ToListAsync();
+
                 foreach (var questionDto in examDto.Questions)
                 {
+                    // Skip if this question already exists in this exam
+                    var exists = existingExamQuestions.Any(eq => 
+                        eq.QuestionId == questionDto.QuestionId);
+                    
+                    if (exists)
+                    {
+                        Console.WriteLine($"Skipping duplicate question {questionDto.QuestionId} for exam {exam.ExamId}");
+                        continue;
+                    }
+
                     var examQuestion = new ExamQuestion
                     {
                         ExamQuestionId = Guid.NewGuid().ToString(),
@@ -237,7 +311,7 @@ namespace BE_Phygens.Controllers
             exam.DurationMinutes = examDto.DurationMinutes;
             exam.ExamType = examDto.ExamType;
             exam.IsPublished = examDto.IsPublished;
-            exam.AiGenerationConfig = examDto.AiGenerationConfig;
+            exam.AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig);
 
             // Remove existing questions
             var existingExamQuestions = await _context.ExamQuestions

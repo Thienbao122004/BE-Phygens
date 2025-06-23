@@ -11,7 +11,7 @@ namespace BE_Phygens.DTOs
         public string ExamType { get; set; } = string.Empty; // "15p", "1tiet", "cuoiky"
         public string CreatedBy { get; set; } = string.Empty; // userId
         public List<ExamQuestionCreateDto> Questions { get; set; } = new();
-        public string? AiGenerationConfig { get; set; } // Optional JSON config
+        public object? AiGenerationConfig { get; set; } 
     }
 
     public class ExamUpdateDto
@@ -22,7 +22,7 @@ namespace BE_Phygens.DTOs
         public string ExamType { get; set; } = string.Empty;
         public bool IsPublished { get; set; }
         public List<ExamQuestionCreateDto> Questions { get; set; } = new();
-        public string? AiGenerationConfig { get; set; } // Optional JSON config
+        public object? AiGenerationConfig { get; set; } 
     }
 
     public class ExamGenerateDto
@@ -61,7 +61,7 @@ namespace BE_Phygens.DTOs
         public bool IsPublished { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<ExamQuestionDto> Questions { get; set; } = new();
-        public string? AiGenerationConfig { get; set; } // Optional JSON config
+        public object? AiGenerationConfig { get; set; } 
     }
 
     public class ExamQuestionDto

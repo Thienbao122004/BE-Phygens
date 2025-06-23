@@ -335,28 +335,48 @@ namespace BE_Phygens.Services
             try
             {
                 var provider = _configuration["AI:Provider"]?.ToLower() ?? "mock";
-                var testPrompt = "Test connection. Reply with 'OK'.";
+                var testPrompt = "Hi";
 
                 _logger.LogInformation($"Testing AI connection with provider: {provider}");
 
-                var response = provider switch
+                // Force Gemini only
+                if (provider != "gemini")
                 {
-                    "openai" => await CallOpenAIAsync(testPrompt),
-                    "gemini" => await CallGeminiAsync(testPrompt),
-                    "claude" => await CallClaudeAsync(testPrompt),
-                    _ => "OK"
-                };
+                    _logger.LogError($"Provider '{provider}' not supported. Only Gemini allowed.");
+                    return false;
+                }
 
-                _logger.LogInformation($"AI response received: '{response}' (Length: {response?.Length ?? 0})");
+                // Check API key first
+                var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? _configuration["AI:Gemini:ApiKey"];
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    _logger.LogError("Gemini API key not configured");
+                    return false;
+                }
+
+                _logger.LogInformation($"API key configured: {apiKey.Substring(0, Math.Min(10, apiKey.Length))}...");
+
+                var response = await CallGeminiAsync(testPrompt);
+                _logger.LogInformation($"Gemini response received: '{response}' (Length: {response?.Length ?? 0})");
 
                 var isSuccess = !string.IsNullOrEmpty(response) && response.Trim().Length > 0;
-                _logger.LogInformation($"AI connection test result: {isSuccess}");
+                _logger.LogInformation($"Gemini connection test result: {isSuccess}");
                 
                 return isSuccess;
             }
+            catch (HttpRequestException httpEx) when (httpEx.Message.Contains("429") || httpEx.Message.Contains("Too Many Requests"))
+            {
+                _logger.LogWarning("Gemini API rate limited - connection is working but throttled");
+                return true; // Rate limit means API is reachable
+            }
+            catch (Exception ex) when (ex.Message.Contains("rate limited"))
+            {
+                _logger.LogWarning("Gemini API rate limited - connection is working but throttled");
+                return true; // Rate limit means API is reachable
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "AI connection test failed");
+                _logger.LogError(ex, "Gemini connection test failed");
                 return false;
             }
         }

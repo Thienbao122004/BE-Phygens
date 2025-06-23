@@ -11,6 +11,8 @@ namespace BE_Phygens.Dto
         public string QuestionText { get; set; } = string.Empty;
         public string QuestionType { get; set; } = string.Empty;
         public string Difficulty { get; set; } = string.Empty;
+        public string DifficultyLevel { get; set; } = string.Empty; 
+        public string? Explanation { get; set; } 
         public string ImageUrl { get; set; } = string.Empty;
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }

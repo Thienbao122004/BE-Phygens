@@ -56,7 +56,7 @@ namespace BE_Phygens.Models
         [Column("aipromptused")]
         public string? AiPromptUsed { get; set; }
 
-        [Column("aigenerationmetadata")]
+        [Column("aigenerationmetadata", TypeName = "jsonb")]
         public string? AiGenerationMetadata { get; set; } // JSON string
 
         [Column("qualityscore")]
@@ -78,6 +78,10 @@ namespace BE_Phygens.Models
         [ForeignKey("TopicId")]
         [System.Text.Json.Serialization.JsonIgnore]
         public virtual PhysicsTopic Topic { get; set; } = null!;
+
+        [ForeignKey("ChapterId")]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public virtual Chapter? Chapter { get; set; } 
 
         [ForeignKey("CreatedBy")]
         [System.Text.Json.Serialization.JsonIgnore]

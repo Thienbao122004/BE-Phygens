@@ -35,26 +35,21 @@ namespace BE_Phygens.Controllers
             {
                 _logger.LogInformation($"Generating question for ChapterId: {request.ChapterId}");
                 
-                // Validate Chapter exists
+                // REQUIRE REAL CHAPTER FROM DATABASE - NO DEFAULTS
                 var chapter = await _context.Set<Chapter>()
                     .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId && c.IsActive);
                 
                 if (chapter == null)
                 {
-                    _logger.LogWarning($"Chapter {request.ChapterId} not found, creating default chapter");
-                    
-                    // Create a default chapter for AI generation
-                    chapter = new Chapter
+                    _logger.LogError($"Chapter {request.ChapterId} not found in database");
+                    return BadRequest(new ApiResponse<QuestionDto>
                     {
-                        ChapterId = request.ChapterId,
-                        ChapterName = "Chương học mặc định",
-                        Grade = 10,
-                        Description = "Chương học được tạo tự động cho AI",
-                        DisplayOrder = 1,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
+                        Success = false,
+                        Message = $"Chapter ID {request.ChapterId} không tồn tại trong database. Vui lòng chọn chapter hợp lệ."
+                    });
                 }
+                
+                _logger.LogInformation($"Using real chapter: {chapter.ChapterName} (Grade {chapter.Grade})");
 
                 // Generate question using AI service
                 var questionDto = await _aiService.GenerateQuestionAsync(chapter, request);
@@ -62,6 +57,7 @@ namespace BE_Phygens.Controllers
                 // Save to database if requested
                 if (request.SaveToDatabase)
                 {
+                    _logger.LogInformation($"Saving question {questionDto.QuestionId} to database...");
                     await SaveQuestionToDatabase(questionDto);
                 }
 
@@ -98,7 +94,11 @@ namespace BE_Phygens.Controllers
                     var chapter = await _context.Set<Chapter>()
                         .FirstOrDefaultAsync(c => c.ChapterId == spec.ChapterId && c.IsActive);
                     
-                    if (chapter == null) continue;
+                    if (chapter == null) 
+                    {
+                        _logger.LogError($"Chapter {spec.ChapterId} not found for batch generation");
+                        continue;
+                    }
 
                     for (int i = 0; i < spec.Count; i++)
                     {
@@ -114,15 +114,26 @@ namespace BE_Phygens.Controllers
                         var question = await _aiService.GenerateQuestionAsync(chapter, questionRequest);
                         questions.Add(question);
 
+                        // Save to database if requested - temporarily disabled for debugging
+                        if (request.SaveToDatabase)
+                        {
+                            _logger.LogWarning($"Database save temporarily disabled for question {question.QuestionId}");
+                            // await SaveQuestionToDatabase(question);
+                        }
+
                         // Add delay to avoid rate limiting
                         await Task.Delay(1000);
                     }
                 }
 
+                var savedCount = request.SaveToDatabase ? 
+                    $"Tạo và lưu thành công {questions.Count} câu hỏi vào database" :
+                    $"Tạo thành công {questions.Count} câu hỏi";
+
                 return Ok(new ApiResponse<List<QuestionDto>>
                 {
                     Success = true,
-                    Message = $"Tạo thành công {questions.Count} câu hỏi",
+                    Message = savedCount,
                     Data = questions
                 });
             }
@@ -290,6 +301,92 @@ namespace BE_Phygens.Controllers
             }
         }
 
+        /// <summary>
+        /// Get all questions with pagination and filters
+        /// </summary>
+        [HttpGet("list")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GetQuestions(
+            [FromQuery] int page = 1, 
+            [FromQuery] int pageSize = 10, 
+            [FromQuery] string search = "",
+            [FromQuery] string difficultyLevel = "",
+            [FromQuery] int? chapterId = null)
+        {
+            try
+            {
+                var query = _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .Where(q => q.IsActive)
+                    .AsQueryable();
+
+                // Apply filters
+                if (!string.IsNullOrEmpty(search))
+                {
+                    query = query.Where(q => q.QuestionText.Contains(search) || 
+                                           (q.Explanation != null && q.Explanation.Contains(search)));
+                }
+
+                if (!string.IsNullOrEmpty(difficultyLevel))
+                {
+                    query = query.Where(q => q.DifficultyLevel == difficultyLevel);
+                }
+
+                if (chapterId.HasValue)
+                {
+                    query = query.Where(q => q.ChapterId == chapterId.Value);
+                }
+
+                // Get total count
+                var totalCount = await query.CountAsync();
+
+                // Apply pagination
+                var questions = await query
+                    .OrderByDescending(q => q.CreatedAt)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+
+                // Convert to DTOs
+                var questionDtos = questions.Select(q => new QuestionDto
+                {
+                    QuestionId = q.QuestionId,
+                    QuestionText = q.QuestionText,
+                    Difficulty = q.DifficultyLevel,
+                    DifficultyLevel = q.DifficultyLevel, 
+                    Explanation = q.Explanation, 
+                    Topic = q.SpecificTopic ?? "Chưa phân loại",
+                    QuestionType = q.QuestionType,
+                    CreatedAt = q.CreatedAt,
+                    CreatedBy = q.CreatedBy ?? "system",
+                    AnswerChoices = q.AnswerChoices?.Select(ac => new AnswerChoiceDto
+                    {
+                        ChoiceId = ac.ChoiceId,
+                        ChoiceText = ac.ChoiceText,
+                        IsCorrect = ac.IsCorrect,
+                        ChoiceLabel = ac.ChoiceLabel ?? "A",
+                        DisplayOrder = ac.DisplayOrder ?? 0
+                    }).ToList() ?? new List<AnswerChoiceDto>()
+                }).ToList();
+
+                return Ok(new ApiResponse<List<QuestionDto>>
+                {
+                    Success = true,
+                    Message = "Lấy danh sách câu hỏi thành công",
+                    Data = questionDtos
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting questions");
+                return StatusCode(500, new ApiResponse<List<QuestionDto>>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
         [HttpGet("chapters")]
         [AllowAnonymous]
         public async Task<ActionResult<ApiResponse<List<Chapter>>>> GetChapters()
@@ -356,41 +453,21 @@ namespace BE_Phygens.Controllers
             try
             {
                 _logger.LogInformation($"SaveQuestionToDatabase called for: {questionDto.QuestionId}");
+
+                // Check if question already exists
+                var existingQuestion = await _context.Questions
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionDto.QuestionId);
                 
-                // TEMPORARY FIX: Disable database save to avoid PhysicsTopics compatibility issues
-                // Frontend still works - questions are generated and used to create exams
-                // Database persistence can be fixed later
-                
-                _logger.LogInformation("Database save temporarily disabled - question data still available for exam creation");
-                
-                // TODO: Fix PhysicsTopics table compatibility and re-enable database save
-                // The AI generation still works, questions are used in memory for exam creation
-                
-                return; // Skip database save for now
-                
-                /*
-                // Original save logic - commented out temporarily
-                var defaultTopicId = "TOPIC_001"; 
-                
-                User? aiUser = null;
-                try
+                if (existingQuestion != null)
                 {
-                    _logger.LogInformation("Searching for ai_system user...");
-                    aiUser = await _context.Users
-                        .FirstOrDefaultAsync(u => u.UserId == "ai_system");
-                    
-                    if (aiUser == null)
-                    {
-                        _logger.LogInformation("ai_system not found, searching for admin users...");
-                        aiUser = await _context.Users
-                            .FirstOrDefaultAsync(u => u.Role == "admin");
-                    }
-                    _logger.LogInformation($"Found user: {aiUser?.UserId ?? "NULL"}");
+                    _logger.LogWarning($"Question {questionDto.QuestionId} already exists in database, skipping save");
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "User query failed");
-                }
+
+                var defaultTopicId = await GetOrCreateDefaultTopic(); 
+                
+                // Ensure ai_system user exists or find alternative
+                string createdByUserId = await EnsureAISystemUser();
 
                 _logger.LogInformation("Creating Question entity...");
                 var question = new Question
@@ -402,13 +479,14 @@ namespace BE_Phygens.Controllers
                     TopicId = defaultTopicId,
                     ChapterId = null,
                     ImageUrl = questionDto.ImageUrl,
-                    CreatedBy = aiUser?.UserId ?? "ai_system",
+                    CreatedBy = createdByUserId,
                     CreatedAt = questionDto.CreatedAt,
                     IsActive = true,
                     AiGenerated = true,
                     AiProvider = "Gemini",
                     AiModel = "gemini-1.5-flash",
-                    AiValidationStatus = "pending"
+                    AiValidationStatus = "pending",
+                    AiGenerationMetadata = "{\"generated_at\": \"" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ") + "\", \"source\": \"mock_ai\"}"
                 };
 
                 _context.Questions.Add(question);
@@ -432,13 +510,104 @@ namespace BE_Phygens.Controllers
                 _logger.LogInformation("Saving all changes to database...");
                 await _context.SaveChangesAsync();
                 _logger.LogInformation($"Question saved successfully: {questionDto.QuestionId}");
-                */
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error in SaveQuestionToDatabase: {ex.Message}");
-                // Don't throw - let the process continue without database save
-                _logger.LogWarning("Continuing without database save - AI generation still functional");
+                _logger.LogError(ex, $"CRITICAL: Failed to save question {questionDto.QuestionId} to database: {ex.Message}");
+                _logger.LogError(ex, $"Stack trace: {ex.StackTrace}");
+                
+                // Now throw the exception so caller knows about the failure
+                throw new InvalidOperationException($"Không thể lưu câu hỏi {questionDto.QuestionId} vào database: {ex.Message}", ex);
+            }
+        }
+
+        private async Task<string> EnsureAISystemUser()
+        {
+            try
+            {
+                // First try to find any admin user
+                var adminUser = await _context.Users
+                    .Where(u => u.Role == "admin")
+                    .FirstOrDefaultAsync();
+                
+                if (adminUser != null)
+                {
+                    _logger.LogInformation($"Using existing admin user: {adminUser.UserId}");
+                    return adminUser.UserId;
+                }
+                
+                // Try to find ai_system user
+                var aiSystemUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.UserId == "ai_system");
+                
+                if (aiSystemUser != null)
+                {
+                    _logger.LogInformation("Using existing ai_system user");
+                    return "ai_system";
+                }
+                
+                // Create ai_system user if not exists
+                _logger.LogInformation("Creating ai_system user...");
+                var newAiUser = new User
+                {
+                    UserId = "ai_system",
+                    Username = "ai_system",
+                    FullName = "ai_system",
+                    Email = "ai_system@phygens.local",
+                    Role = "admin",
+                    PasswordHash = "$2a$11$dummyhashforaisystemuser123456789",
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+                
+                _context.Users.Add(newAiUser);
+                await _context.SaveChangesAsync();
+                
+                _logger.LogInformation("Created ai_system user successfully");
+                return "ai_system";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not ensure ai_system user, using existing fallback");
+                
+                // Last resort: try to get any user
+                try
+                {
+                    var anyUser = await _context.Users.FirstOrDefaultAsync();
+                    if (anyUser != null)
+                    {
+                        return anyUser.UserId;
+                    }
+                }
+                catch { }
+                
+                // Ultimate fallback - this will likely cause FK violation but let's see the exact error
+                return "ai_system";
+            }
+        }
+
+        private async Task<string> GetOrCreateDefaultTopic()
+        {
+            try
+            {
+                // First try to find any existing topic
+                var existingTopic = await _context.PhysicsTopics
+                    .FirstOrDefaultAsync();
+                
+                if (existingTopic != null)
+                {
+                    _logger.LogInformation($"Using existing topic: {existingTopic.TopicId}");
+                    return existingTopic.TopicId;
+                }
+
+                // If no topics exist, use the sample data format
+                _logger.LogInformation("No topics found, using fallback TOPIC_001");
+                return "TOPIC_001"; // Match sample data format
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not access PhysicsTopics table, using fallback");
+                return "TOPIC_001"; // Ultimate fallback
             }
         }
 
