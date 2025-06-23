@@ -78,6 +78,11 @@ namespace BE_Phygens.Models
                 entity.Property(q => q.ChapterId)
                     .HasColumnName("chapterid")
                     .HasColumnType("integer");
+                    
+                // Configure JSONB column for AI metadata
+                entity.Property(q => q.AiGenerationMetadata)
+                    .HasColumnName("aigenerationmetadata")
+                    .HasColumnType("jsonb");
             });
 
             // AnswerChoice constraints
