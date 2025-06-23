@@ -65,7 +65,7 @@ namespace BE_Phygens.Dto
 
         [Required(ErrorMessage = "Role is required")]
         [JsonPropertyName("role")]
-        public string Role { get; set; } = string.Empty; // teacher, student, admin
+        public string Role { get; set; } = string.Empty; //student, admin
     }
 
     public class UpdateUserRequestDto

@@ -108,6 +108,23 @@ namespace BE_Phygens
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
+                
+                // Custom event để tự động thêm "Bearer " prefix
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var authorization = context.Request.Headers["Authorization"].FirstOrDefault();
+                        
+                        if (!string.IsNullOrEmpty(authorization) && !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Nếu không bắt đầu bằng "Bearer ", tự động thêm vào
+                            context.Request.Headers["Authorization"] = $"Bearer {authorization}";
+                        }
+                        
+                        return Task.CompletedTask;
+                    }
+                };
             });
             // Authorization (nếu bạn cần Role-based policy)
             builder.Services.AddAuthorization();
@@ -143,8 +160,15 @@ namespace BE_Phygens
                 });
             });
 
-            // Add Controllers
-            builder.Services.AddControllers();
+            // Add Controllers with JSON options to handle circular references
+            builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
+                    options.JsonSerializerOptions.WriteIndented = true;
+                    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
+                });
             builder.Services.AddEndpointsApiExplorer();
             
             // Configure Swagger with JWT Authentication
@@ -160,10 +184,10 @@ namespace BE_Phygens
                 // Add JWT Authentication to Swagger
                 c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
                 {
-                    Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.\n\nExample: \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"",
+                    Description = "Chỉ cần nhập giá trị token của bạn thôi nhé!.\n\nExample: \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"",
                     Name = "Authorization",
                     In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+                    Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
                     Scheme = "Bearer",
                     BearerFormat = "JWT"
                 });
@@ -207,6 +231,17 @@ namespace BE_Phygens
             {
                 app.UseHttpsRedirection();
             }
+
+            // Add request logging middleware
+            app.Use(async (context, next) =>
+            {
+                var logger = context.RequestServices.GetRequiredService<ILogger<Programs>>();
+                logger.LogInformation($"Request: {context.Request.Method} {context.Request.Path} from {context.Connection.RemoteIpAddress}");
+                
+                await next();
+                
+                logger.LogInformation($"Response: {context.Response.StatusCode} for {context.Request.Method} {context.Request.Path}");
+            });
 
             app.UseRouting();
 

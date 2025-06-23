@@ -20,6 +20,8 @@ namespace BE_Phygens.Models
         public DbSet<LearningProgress> LearningProgresses { get; set; }
         public DbSet<StudentAttempt> StudentAttempts { get; set; }
         public DbSet<StudentAnswer> StudentAnswers { get; set; }
+        public DbSet<Chapter> Chapters { get; set; }
+        public DbSet<ExamMatrixDetail> ExamMatrixDetails { get; set; }
         
         // AI-related DbSets
         public DbSet<AiGenerationHistory> AiGenerationHistories { get; set; }
@@ -40,7 +42,7 @@ namespace BE_Phygens.Models
             {
                 entity.HasIndex(e => e.Username).IsUnique();
                 entity.HasIndex(e => e.Email).IsUnique();
-                entity.HasCheckConstraint("CK_User_Role", "role IN ('teacher', 'student', 'admin')");
+                entity.HasCheckConstraint("CK_User_Role", "role IN ('student', 'admin')");
             });
 
             // PhysicsTopic constraints
@@ -48,6 +50,20 @@ namespace BE_Phygens.Models
             {
                 entity.HasIndex(e => e.TopicName).IsUnique();
                 entity.HasCheckConstraint("CK_PhysicsTopic_DisplayOrder", "displayorder > 0");
+            });
+
+            // Chapter constraints
+            modelBuilder.Entity<Chapter>(entity =>
+            {
+                entity.HasCheckConstraint("CK_Chapter_DisplayOrder", "displayorder > 0");
+                entity.HasCheckConstraint("CK_Chapter_Grade", "grade IN (10, 11, 12)");
+            });
+
+            // ExamMatrixDetail constraints
+            modelBuilder.Entity<ExamMatrixDetail>(entity =>
+            {
+                entity.HasCheckConstraint("CK_ExamMatrixDetail_QuestionCount", "questioncount >= 0");
+                entity.HasCheckConstraint("CK_ExamMatrixDetail_DifficultyLevel", "difficultylevel IN ('easy', 'medium', 'hard')");
             });
 
             // Question constraints
@@ -74,7 +90,12 @@ namespace BE_Phygens.Models
             modelBuilder.Entity<Exam>(entity =>
             {
                 entity.HasCheckConstraint("CK_Exam_DurationMinutes", "durationminutes > 0");
-                entity.HasCheckConstraint("CK_Exam_ExamType", "examtype IN ('15p', '1tiet', 'cuoiky')");
+                entity.HasCheckConstraint("CK_Exam_ExamType", "examtype IN ('15p', '1tiet', 'cuoiky', 'ai_generated', 'smart_exam', 'adaptive')");
+                
+                // Configure JSONB column
+                entity.Property(e => e.AiGenerationConfig)
+                    .HasColumnName("aigenerationconfig")
+                    .HasColumnType("jsonb");
             });
 
             // ExamMatrix constraints
@@ -262,6 +283,22 @@ namespace BE_Phygens.Models
                 .WithMany()
                 .HasForeignKey(t => t.CreatedBy)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Chapter relationships 
+            // Note: Không tạo explicit relationship với Question vì đã có foreign key ChapterId
+
+            // ExamMatrixDetail relationships
+            modelBuilder.Entity<ExamMatrixDetail>()
+                .HasOne(emd => emd.ExamMatrix)
+                .WithMany(em => em.ExamMatrixDetails)
+                .HasForeignKey(emd => emd.ExamMatrixId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ExamMatrixDetail>()
+                .HasOne(emd => emd.Chapter)
+                .WithMany(c => c.ExamMatrixDetails)
+                .HasForeignKey(emd => emd.ChapterId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 } 
