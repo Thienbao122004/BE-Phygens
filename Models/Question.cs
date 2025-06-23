@@ -76,14 +76,23 @@ namespace BE_Phygens.Models
 
         // Navigation properties
         [ForeignKey("TopicId")]
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual PhysicsTopic Topic { get; set; } = null!;
 
         [ForeignKey("CreatedBy")]
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual User Creator { get; set; } = null!;
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<AnswerChoice> AnswerChoices { get; set; } = new List<AnswerChoice>();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<ExamQuestion> ExamQuestions { get; set; } = new List<ExamQuestion>();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<Explanation> Explanations { get; set; } = new List<Explanation>();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<StudentAnswer> StudentAnswers { get; set; } = new List<StudentAnswer>();
     }
 }

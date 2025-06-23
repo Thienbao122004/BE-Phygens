@@ -33,13 +33,16 @@ namespace BE_Phygens.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation properties
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<ExamMatrixDetail> ExamMatrixDetails { get; set; } = new List<ExamMatrixDetail>();
     }
 
     // Bảng trung gian cho ExamMatrix - Chapter (n-n)
+    [Table("ExamMatrixDetail")]
     public class ExamMatrixDetail
     {
         [Key]
+        [Column("Id")]
         public int Id { get; set; }
         
         [Column("exammatrixid")]
@@ -57,9 +60,11 @@ namespace BE_Phygens.Models
         
         // Navigation properties
         [ForeignKey("ExamMatrixId")]
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ExamMatrix ExamMatrix { get; set; } = null!;
         
         [ForeignKey("ChapterId")]
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual Chapter Chapter { get; set; } = null!;
     }
 } 

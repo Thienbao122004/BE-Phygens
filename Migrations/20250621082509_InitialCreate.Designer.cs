@@ -535,7 +535,7 @@ namespace BE_Phygens.Migrations
 
                     b.ToTable("User", t =>
                         {
-                            t.HasCheckConstraint("CK_User_Role", "role IN ('teacher', 'student', 'admin')");
+                            t.HasCheckConstraint("CK_User_Role", "role IN ('student', 'admin')");
                         });
                 });
 

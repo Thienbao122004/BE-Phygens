@@ -66,7 +66,7 @@ namespace BE_Phygens.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_User", x => x.userid);
-                    table.CheckConstraint("CK_User_Role", "role IN ('teacher', 'student', 'admin')");
+                    table.CheckConstraint("CK_User_Role", "role IN ('student', 'admin')");
                 });
 
             migrationBuilder.CreateTable(

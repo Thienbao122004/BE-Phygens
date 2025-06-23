@@ -38,7 +38,7 @@ namespace BE_Phygens.Models
         [Column("isaigenerated")]
         public bool IsAiGenerated { get; set; } = false;
 
-        [Column("aigenerationconfig")]
+        [Column("aigenerationconfig", TypeName = "jsonb")]
         public string? AiGenerationConfig { get; set; } // JSON string
 
         [Column("autogradingenabled")]
@@ -47,11 +47,18 @@ namespace BE_Phygens.Models
         [Column("adaptivedifficulty")]
         public bool AdaptiveDifficulty { get; set; } = false;
 
+        [Column("ExamMatrixMatrixId")]
+        public string? ExamMatrixMatrixId { get; set; }
+
         // Navigation properties
         [ForeignKey("CreatedBy")]
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual User Creator { get; set; } = null!;
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<ExamQuestion> ExamQuestions { get; set; } = new List<ExamQuestion>();
+        
+        [System.Text.Json.Serialization.JsonIgnore]
         public virtual ICollection<StudentAttempt> StudentAttempts { get; set; } = new List<StudentAttempt>();
     }
 } 

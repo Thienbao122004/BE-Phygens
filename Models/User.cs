@@ -25,7 +25,7 @@ namespace BE_Phygens.Models
 
         [Required]
         [Column("role")]
-        public string Role { get; set; } = string.Empty; // teacher, student, admin
+        public string Role { get; set; } = string.Empty; //  student, admin
 
         [Required]
         [Column("passwordhash")]

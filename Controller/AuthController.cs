@@ -118,10 +118,9 @@ namespace BE_Phygens.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResult(message));
                 }
 
-                // Validate role (only allow student and teacher for registration)
-                if (!new[] { "student", "teacher" }.Contains(request.Role.ToLower()))
+                if (!new[] { "student" }.Contains(request.Role.ToLower()))
                 {
-                    return BadRequest(ApiResponse<object>.ErrorResult("Invalid role. Only 'student' and 'teacher' are allowed"));
+                    return BadRequest(ApiResponse<object>.ErrorResult("Invalid role. Only 'student' are allowed"));
                 }
 
                 // Hash password
@@ -388,13 +387,6 @@ namespace BE_Phygens.Controllers
                     "view_analytics", 
                     "manage_questions",
                     "view_reports"
-                },
-                "teacher" => new List<string> 
-                { 
-                    "create_exams", 
-                    "view_own_exams", 
-                    "grade_exams",
-                    "view_student_progress"
                 },
                 "student" => new List<string> 
                 { 
