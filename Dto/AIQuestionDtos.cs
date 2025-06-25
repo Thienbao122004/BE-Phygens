@@ -34,9 +34,9 @@ namespace BE_Phygens.Dto
     {
         public string ExamName { get; set; } = string.Empty;
         public string ExamType { get; set; } = "1tiet";
-        public int Grade { get; set; } = 10;
+        public int Grade { get; set; }
         public int Duration { get; set; } = 45;
-        public decimal TotalPoints { get; set; } = 10;
+        public decimal TotalPoints { get; set; }
         public string? Description { get; set; }
         public List<ChapterDetailRequest> ChapterDetails { get; set; } = new();
     }

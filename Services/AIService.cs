@@ -352,7 +352,7 @@ namespace BE_Phygens.Services
                     "huggingface" => await CallHuggingFaceAsync(testPrompt),
                     "togetherai" => await CallTogetherAIAsync(testPrompt),
                     "openrouter" => await CallOpenRouterAsync(testPrompt),
-                    _ => "mock response"
+                    _ => throw new InvalidOperationException($"❌ AI PROVIDER KHÔNG HỖ TRỢ: {provider}")
                 };
 
                 _logger.LogInformation($"{provider} response received: '{response}' (Length: {response?.Length ?? 0})");
@@ -816,26 +816,8 @@ Trả về theo định dạng JSON chính xác:
 
         private QuestionDto CreateMockQuestion(Chapter chapter, GenerateQuestionRequest request)
         {
-            var questionId = Guid.NewGuid().ToString();
-            
-            return new QuestionDto
-            {
-                QuestionId = questionId,
-                Topic = chapter.ChapterName,
-                QuestionText = $"[MOCK] Câu hỏi mẫu về {chapter.ChapterName} - độ khó {request.DifficultyLevel}",
-                QuestionType = request.QuestionType,
-                Difficulty = request.DifficultyLevel,
-                ImageUrl = "",
-                CreatedBy = "AI_System_Mock",
-                CreatedAt = DateTime.UtcNow,
-                AnswerChoices = new[]
-                {
-                    new AnswerChoiceDto { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "A", ChoiceText = "Đáp án A (đúng)", IsCorrect = true, DisplayOrder = 1 },
-                    new AnswerChoiceDto { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "B", ChoiceText = "Đáp án B", IsCorrect = false, DisplayOrder = 2 },
-                    new AnswerChoiceDto { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "C", ChoiceText = "Đáp án C", IsCorrect = false, DisplayOrder = 3 },
-                    new AnswerChoiceDto { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "D", ChoiceText = "Đáp án D", IsCorrect = false, DisplayOrder = 4 }
-                }.ToList()
-            };
+            // ❌ REMOVED: Absolutely NO MOCK questions allowed
+            throw new InvalidOperationException($"❌ CẤM TUYỆT ĐỐI TẠO MOCK QUESTION! Chapter: {chapter.ChapterName}, Difficulty: {request.DifficultyLevel}, Type: {request.QuestionType}");
         }
 
         // Additional helper methods would go here...
@@ -846,8 +828,8 @@ Trả về theo định dạng JSON chính xác:
         private QuestionDto ParseImprovedQuestion(string content, Question original) => new();
         private QuestionValidationDto ParseValidationResult(string result) => new();
         private List<TopicSuggestionDto> ParseTopicSuggestions(string suggestions) => new();
-        private string CreateMockValidation() => "";
-        private List<TopicSuggestionDto> CreateMockTopicSuggestions(Chapter chapter) => new();
+        private string CreateMockValidation() => throw new InvalidOperationException("❌ CẤM MOCK VALIDATION!");
+        private List<TopicSuggestionDto> CreateMockTopicSuggestions(Chapter chapter) => throw new InvalidOperationException("❌ CẤM MOCK TOPIC SUGGESTIONS!");
         private async Task<StudentPerformance> AnalyzeStudentPerformance(string studentId, int chapterId) => new();
         private string DetermineAdaptiveDifficulty(StudentPerformance performance, int questionIndex) => "medium";
         private Dictionary<string, int> CalculateDifficultyDistribution(int totalQuestions, DifficultyDistribution distribution)

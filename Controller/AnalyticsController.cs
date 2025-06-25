@@ -8,7 +8,7 @@ namespace BE_Phygens.Controllers
 {
     [Route("analytics")]
     [ApiController]
-    [Authorize]
+    [AllowAnonymous]
     public class AnalyticsController : ControllerBase
     {
         private readonly PhygensContext _context;
@@ -21,57 +21,337 @@ namespace BE_Phygens.Controllers
         }
 
         [HttpGet("dashboard")]
-        public async Task<ActionResult<ApiResponse<DashboardDto>>> GetDashboard()
+        public async Task<ActionResult<ApiResponse<DashboardDataDto>>> GetDashboard()
         {
             try
             {
+                // Get dashboard statistics
+                var totalExams = await _context.Exams.CountAsync();
                 var totalUsers = await _context.Users.CountAsync();
                 var totalQuestions = await _context.Questions.CountAsync();
-                var totalExams = await _context.Exams.CountAsync();
-                var totalAttempts = await _context.StudentAttempts.CountAsync();
+                var totalChapters = await _context.Chapters.CountAsync();
 
-                var recentAttempts = await _context.StudentAttempts
-                    .Include(sa => sa.User)
-                    .Include(sa => sa.Exam)
-                    .OrderByDescending(sa => sa.CreatedAt)
+                // Get recent activities (last 30 days)
+                var recentExams = await _context.Exams
+                    .Where(e => e.CreatedAt >= DateTime.UtcNow.AddDays(-30))
+                    .OrderByDescending(e => e.CreatedAt)
                     .Take(10)
-                    .Select(sa => new RecentAttemptDto
+                    .Select(e => new RecentActivityDto
                     {
-                        AttemptId = sa.AttemptId,
-                        UserName = sa.User.FullName,
-                        ExamName = sa.Exam.ExamName,
-                        Score = sa.TotalScore,
-                        MaxScore = sa.MaxScore ?? 10,
-                        Status = sa.Status,
-                        CreatedAt = sa.CreatedAt
+                        Id = e.ExamId,
+                        Type = "exam_created",
+                        Title = e.ExamName,
+                        Description = $"Đề thi {e.ExamName} đã được tạo",
+                        CreatedAt = e.CreatedAt,
+                        CreatedBy = e.CreatedBy
                     })
                     .ToListAsync();
 
-                var dashboard = new DashboardDto
+                var dashboardData = new DashboardDataDto
                 {
+                    TotalExams = totalExams,
                     TotalUsers = totalUsers,
                     TotalQuestions = totalQuestions,
-                    TotalExams = totalExams,
-                    TotalAttempts = totalAttempts,
-                    RecentAttempts = recentAttempts
+                    TotalChapters = totalChapters,
+                    RecentActivities = recentExams
                 };
 
-                return Ok(new ApiResponse<DashboardDto>
+                return Ok(new ApiResponse<DashboardDataDto>
                 {
                     Success = true,
-                    Message = "Lấy dashboard thành công",
-                    Data = dashboard
+                    Message = "Dashboard data retrieved successfully",
+                    Data = dashboardData
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting dashboard");
-                return StatusCode(500, new ApiResponse<DashboardDto>
+                _logger.LogError(ex, "Error getting dashboard data");
+                return StatusCode(500, new ApiResponse<DashboardDataDto>
                 {
                     Success = false,
-                    Message = $"Lỗi server: {ex.Message}"
+                    Message = $"Server error: {ex.Message}"
                 });
             }
+        }
+
+        [HttpGet("recent-activities")]
+        public async Task<ActionResult<ApiResponse<List<RecentActivityDto>>>> GetRecentActivities([FromQuery] int limit = 10)
+        {
+            try
+            {
+                var activities = new List<RecentActivityDto>();
+
+                // Get recent exams
+                var recentExams = await _context.Exams
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Take(limit / 2)
+                    .Select(e => new RecentActivityDto
+                    {
+                        Id = e.ExamId,
+                        Type = "exam_created",
+                        Title = e.ExamName,
+                        Description = $"Đã tạo đề thi {e.ExamName}",
+                        CreatedAt = e.CreatedAt,
+                        CreatedBy = e.CreatedBy,
+                        Icon = "rocket"
+                    })
+                    .ToListAsync();
+
+                activities.AddRange(recentExams);
+
+                // Get recent questions
+                var recentQuestions = await _context.Questions
+                    .OrderByDescending(q => q.CreatedAt)
+                    .Take(limit / 2)
+                    .Select(q => new RecentActivityDto
+                    {
+                        Id = q.QuestionId,
+                        Type = "question_created",
+                        Title = "Câu hỏi mới",
+                        Description = $"Đã tạo câu hỏi: {q.QuestionText.Substring(0, Math.Min(50, q.QuestionText.Length))}...",
+                        CreatedAt = q.CreatedAt,
+                        CreatedBy = q.CreatedBy,
+                        Icon = "question"
+                    })
+                    .ToListAsync();
+
+                activities.AddRange(recentQuestions);
+
+                // Sort by creation time and take limit
+                activities = activities.OrderByDescending(a => a.CreatedAt).Take(limit).ToList();
+
+                return Ok(new ApiResponse<List<RecentActivityDto>>
+                {
+                    Success = true,
+                    Message = $"Retrieved {activities.Count} recent activities",
+                    Data = activities
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting recent activities");
+                return StatusCode(500, new ApiResponse<List<RecentActivityDto>>
+                {
+                    Success = false,
+                    Message = $"Server error: {ex.Message}"
+                });
+            }
+        }
+
+        [HttpGet("filtered-exams")]
+        public async Task<ActionResult<ApiResponse<List<ExamListDto>>>> GetFilteredExams(
+            [FromQuery] int? grade = null,
+            [FromQuery] string? topic = null,
+            [FromQuery] string? difficulty = null,
+            [FromQuery] int limit = 20)
+        {
+            try
+            {
+                var query = _context.Exams.AsQueryable();
+
+                // Apply filters based on parameters
+                if (grade.HasValue)
+                {
+                    // Filter by exams that contain chapters of specific grade
+                    query = query.Where(e => _context.ExamQuestions
+                        .Include(eq => eq.Question)
+                        .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
+                        .Join(_context.Chapters, 
+                            eq => eq.Question.ChapterId, 
+                            c => c.ChapterId, 
+                            (eq, c) => c.Grade)
+                        .Any(g => g == grade));
+                }
+
+                if (!string.IsNullOrEmpty(topic))
+                {
+                    query = query.Where(e => e.ExamName.Contains(topic) || e.Description.Contains(topic));
+                }
+
+                if (!string.IsNullOrEmpty(difficulty))
+                {
+                    // Filter by exam difficulty based on questions
+                    query = query.Where(e => _context.ExamQuestions
+                        .Include(eq => eq.Question)
+                        .Where(eq => eq.ExamId == e.ExamId)
+                        .Any(eq => eq.Question.DifficultyLevel == difficulty));
+                }
+
+                var exams = await query
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Take(limit)
+                    .Select(e => new ExamListDto
+                    {
+                        ExamId = e.ExamId,
+                        ExamName = e.ExamName,
+                        Description = e.Description,
+                        ExamType = e.ExamType,
+                        Duration = e.DurationMinutes ?? 45,
+                        CreatedAt = e.CreatedAt,
+                        CreatedBy = e.CreatedBy,
+                        IsPublished = e.IsPublished
+                    })
+                    .ToListAsync();
+
+                return Ok(new ApiResponse<List<ExamListDto>>
+                {
+                    Success = true,
+                    Message = $"Retrieved {exams.Count} filtered exams",
+                    Data = exams
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting filtered exams");
+                return StatusCode(500, new ApiResponse<List<ExamListDto>>
+                {
+                    Success = false,
+                    Message = $"Server error: {ex.Message}"
+                });
+            }
+        }
+
+        [HttpGet("exam-stats")]
+        public async Task<ActionResult<ApiResponse<ExamStatsDto>>> GetExamStats()
+        {
+            try
+            {
+                var stats = new ExamStatsDto
+                {
+                    TotalExams = await _context.Exams.CountAsync(),
+                    PublishedExams = await _context.Exams.CountAsync(e => e.IsPublished),
+                    DraftExams = await _context.Exams.CountAsync(e => !e.IsPublished),
+                    TotalQuestions = await _context.Questions.CountAsync(),
+                    AiGeneratedQuestions = await _context.Questions.CountAsync(q => q.AiGenerated == true),
+                    ExamsByType = await _context.Exams
+                        .GroupBy(e => e.ExamType)
+                        .Select(g => new { Type = g.Key, Count = g.Count() })
+                        .ToDictionaryAsync(x => x.Type, x => x.Count)
+                };
+
+                return Ok(new ApiResponse<ExamStatsDto>
+                {
+                    Success = true,
+                    Message = "Exam statistics retrieved successfully",
+                    Data = stats
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting exam stats");
+                return StatusCode(500, new ApiResponse<ExamStatsDto>
+                {
+                    Success = false,
+                    Message = $"Server error: {ex.Message}"
+                });
+            }
+        }
+
+        [HttpGet("sample-exams")]
+        public async Task<ActionResult<ApiResponse<List<SampleExamDto>>>> GetSampleExams(
+            [FromQuery] int? grade = null,
+            [FromQuery] string? subject = null,
+            [FromQuery] string? difficulty = null,
+            [FromQuery] int limit = 10)
+        {
+            try
+            {
+                var query = _context.Exams.AsQueryable();
+
+                // Filter by published exams only for sample exams
+                query = query.Where(e => e.IsPublished);
+
+                // Apply grade filter
+                if (grade.HasValue)
+                {
+                    query = query.Where(e => _context.ExamQuestions
+                        .Include(eq => eq.Question)
+                        .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
+                        .Join(_context.Chapters, 
+                            eq => eq.Question.ChapterId, 
+                            c => c.ChapterId, 
+                            (eq, c) => c.Grade)
+                        .Any(g => g == grade));
+                }
+
+                // Apply subject filter (search in exam name and description)
+                if (!string.IsNullOrEmpty(subject))
+                {
+                    query = query.Where(e => e.ExamName.Contains(subject) || 
+                                           e.Description.Contains(subject) ||
+                                           e.ExamType.Contains(subject));
+                }
+
+                // Apply difficulty filter
+                if (!string.IsNullOrEmpty(difficulty))
+                {
+                    query = query.Where(e => _context.ExamQuestions
+                        .Include(eq => eq.Question)
+                        .Where(eq => eq.ExamId == e.ExamId)
+                        .Any(eq => eq.Question.DifficultyLevel == difficulty));
+                }
+
+                var sampleExams = await query
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Take(limit)
+                    .Select(e => new SampleExamDto
+                    {
+                        ExamId = e.ExamId,
+                        ExamName = e.ExamName,
+                        Description = e.Description,
+                        ExamType = e.ExamType,
+                        Duration = e.DurationMinutes ?? 45,
+                        QuestionCount = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId),
+                        Difficulty = _context.ExamQuestions
+                            .Include(eq => eq.Question)
+                            .Where(eq => eq.ExamId == e.ExamId)
+                            .Select(eq => eq.Question.DifficultyLevel)
+                            .FirstOrDefault() ?? "medium",
+                        Grade = _context.ExamQuestions
+                            .Include(eq => eq.Question)
+                            .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
+                            .Join(_context.Chapters, 
+                                eq => eq.Question.ChapterId, 
+                                c => c.ChapterId, 
+                                (eq, c) => c.Grade)
+                            .FirstOrDefault(),
+                        Subject = "Vật lý", 
+                        CreatedAt = e.CreatedAt,
+                        IsPopular = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId) >= 10
+                    })
+                    .ToListAsync();
+
+                return Ok(new ApiResponse<List<SampleExamDto>>
+                {
+                    Success = true,
+                    Message = $"Retrieved {sampleExams.Count} sample exams",
+                    Data = sampleExams
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting sample exams");
+                return StatusCode(500, new ApiResponse<List<SampleExamDto>>
+                {
+                    Success = false,
+                    Message = $"Server error: {ex.Message}"
+                });
+            }
+        }
+
+        private string GetSubjectFromExamName(string examName)
+        {
+            if (string.IsNullOrEmpty(examName)) return "Vật lý";
+            
+            examName = examName.ToLower();
+            if (examName.Contains("cơ học") || examName.Contains("co hoc")) return "Cơ học";
+            if (examName.Contains("điện học") || examName.Contains("dien hoc")) return "Điện học";
+            if (examName.Contains("quang học") || examName.Contains("quang hoc")) return "Quang học";
+            if (examName.Contains("nhiệt học") || examName.Contains("nhiet hoc")) return "Nhiệt học";
+            if (examName.Contains("sóng") || examName.Contains("song")) return "Sóng";
+            if (examName.Contains("hạt nhân") || examName.Contains("hat nhan")) return "Hạt nhân";
+            
+            return "Vật lý";
         }
 
         [HttpGet("student-progress/{userId}")]
