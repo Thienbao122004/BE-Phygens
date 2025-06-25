@@ -95,8 +95,8 @@ namespace BE_Phygens.Controllers
                             ChapterId = detail.ChapterId,
                             QuestionCount = detail.QuestionCount,
                             DifficultyLevel = detail.DifficultyLevel
-                        };
-                        _context.Set<ExamMatrixDetail>().Add(matrixDetail);
+                    };
+                    _context.Set<ExamMatrixDetail>().Add(matrixDetail);
                     }
                     else
                     {
@@ -176,43 +176,27 @@ namespace BE_Phygens.Controllers
                         }
                         else
                         {
-                            // Create minimal mock questions without saving to DB
-                            for (int i = 0; i < detail.QuestionCount; i++)
+                            // ✅ FIX: Use AI Service to generate REAL questions instead of mock
+                            _logger.LogInformation($"Không tìm thấy câu hỏi trong DB cho chapter {detail.ChapterId}. Tạo câu hỏi AI thật...");
+                            
+                            var chapter = await _context.Chapters.FindAsync(detail.ChapterId);
+                            if (chapter != null)
                             {
-                                var mockQuestion = new QuestionDto
+                                var aiQuestions = await GetQuestionsForChapter(detail.ChapterId, detail.QuestionCount, detail.DifficultyLevel);
+                                if (aiQuestions.Any())
                                 {
-                                    QuestionId = $"MOCK_{detail.ChapterId}_{i + 1}_{Guid.NewGuid().ToString()[..8]}",
-                                    Topic = $"Chapter {detail.ChapterId}",
-                                    QuestionText = $"Mock question {i + 1} for chapter {detail.ChapterId}",
-                                    QuestionType = "multiple_choice",
-                                    Difficulty = detail.DifficultyLevel,
-                                    ChapterId = detail.ChapterId,
-                                    CreatedBy = "mock_system",
-                                    CreatedAt = DateTime.UtcNow
-                                };
-                                
-                                // First, insert this question to database with raw SQL
-                                var sql = @"
-                                    INSERT INTO question (questionid, questiontext, questiontype, difficultylevel, createdby, createdat, topicid, chapterid, isactive, aigenerated)
-                                    VALUES (@questionId, @questionText, @questionType, @difficultyLevel, @createdBy, @createdAt, @topicId, @chapterId, @isActive, @aiGenerated)
-                                    ON CONFLICT (questionid) DO NOTHING";
-                                
-                                await _context.Database.ExecuteSqlRawAsync(sql,
-                                    new Npgsql.NpgsqlParameter("@questionId", mockQuestion.QuestionId),
-                                    new Npgsql.NpgsqlParameter("@questionText", mockQuestion.QuestionText),
-                                    new Npgsql.NpgsqlParameter("@questionType", "multiple_choice"),
-                                    new Npgsql.NpgsqlParameter("@difficultyLevel", detail.DifficultyLevel),
-                                    new Npgsql.NpgsqlParameter("@createdBy", "mock_system"),
-                                    new Npgsql.NpgsqlParameter("@createdAt", DateTime.UtcNow),
-                                    new Npgsql.NpgsqlParameter("@topicId", "TOPIC_001"),
-                                    new Npgsql.NpgsqlParameter("@chapterId", detail.ChapterId),
-                                    new Npgsql.NpgsqlParameter("@isActive", true),
-                                    new Npgsql.NpgsqlParameter("@aiGenerated", true)
-                                );
-                                
-                                validQuestions.Add(mockQuestion);
+                                    validQuestions.AddRange(aiQuestions);
+                                    _logger.LogInformation($"✅ Tạo {aiQuestions.Count} câu hỏi AI thật cho chapter {detail.ChapterId}");
+                                }
+                                else
+                                {
+                                    throw new InvalidOperationException($"Không thể tạo câu hỏi cho chapter {detail.ChapterId}. Vui lòng kiểm tra AI service hoặc thêm câu hỏi vào database.");
+                                }
                             }
-                            _logger.LogInformation($"✅ Tạo {detail.QuestionCount} mock questions cho chapter {detail.ChapterId}");
+                            else
+                            {
+                                throw new InvalidOperationException($"Chapter {detail.ChapterId} không tồn tại trong database.");
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -393,14 +377,33 @@ namespace BE_Phygens.Controllers
         [HttpGet("questions/chapter/{chapterId}")]
         public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GetQuestionsForChapterEndpoint(
             int chapterId,
-            [FromQuery] int count = 5,
-            [FromQuery] string difficulty = "medium")
+            [FromQuery] int count,
+            [FromQuery] string difficulty)
         {
             try
             {
+                // ❌ VALIDATE: Không cho phép values mặc định
+                if (count <= 0)
+                {
+                    return BadRequest(new ApiResponse<List<QuestionDto>>
+                    {
+                        Success = false,
+                        Message = "❌ THAM SỐ 'count' phải lớn hơn 0. Không được để trống hoặc mặc định!"
+                    });
+                }
+                
+                if (string.IsNullOrEmpty(difficulty) || !new[] { "easy", "medium", "hard" }.Contains(difficulty.ToLower()))
+                {
+                    return BadRequest(new ApiResponse<List<QuestionDto>>
+                    {
+                        Success = false,
+                        Message = "❌ THAM SỐ 'difficulty' phải là 'easy', 'medium' hoặc 'hard'. Không được để trống hoặc mặc định!"
+                    });
+                }
+
                 _logger.LogInformation($"Generating {count} {difficulty} questions for chapter {chapterId}");
 
-                var questions = await GetQuestionsForChapter(chapterId, count, difficulty);
+                var questions = await GetQuestionsForChapter(chapterId, count, difficulty.ToLower());
 
                 return Ok(new ApiResponse<List<QuestionDto>>
                 {
@@ -421,60 +424,51 @@ namespace BE_Phygens.Controllers
         }
 
         [HttpGet("templates")]
-        public ActionResult<ApiResponse<List<ExamTemplateDto>>> GetExamTemplates()
+        public async Task<ActionResult<ApiResponse<List<ExamTemplateDto>>>> GetExamTemplates()
         {
-            var templates = new List<ExamTemplateDto>
+            try
             {
-                new()
-                {
-                    TemplateName = "Kiểm tra 15 phút - Cơ học",
-                    ExamType = "15p",
-                    Grade = 10,
-                    Duration = 15,
-                    TotalQuestions = 10,
-                    TotalPoints = 10,
-                    ChapterDetails = new[]
+                // ❌ REMOVED: No more hardcoded templates - templates must come from database or user input
+                var templatesFromDb = await _context.Set<SmartExamTemplate>()
+                    .Where(t => t.IsActive)
+                    .Select(t => new ExamTemplateDto
                     {
-                        new ChapterDetailDto { ChapterId = 1, QuestionCount = 10, DifficultyLevel = "easy" }
-                    }
-                },
-                new()
-                {
-                    TemplateName = "Kiểm tra 1 tiết - Cơ nhiệt",
-                    ExamType = "1tiet",
-                    Grade = 10,
-                    Duration = 45,
-                    TotalQuestions = 25,
-                    TotalPoints = 10,
-                    ChapterDetails = new[]
-                    {
-                        new ChapterDetailDto { ChapterId = 1, QuestionCount = 15, DifficultyLevel = "medium" },
-                        new ChapterDetailDto { ChapterId = 2, QuestionCount = 10, DifficultyLevel = "easy" }
-                    }
-                },
-                new()
-                {
-                    TemplateName = "Thi giữa kì - Vật lý 11",
-                    ExamType = "giuaki",
-                    Grade = 11,
-                    Duration = 90,
-                    TotalQuestions = 40,
-                    TotalPoints = 10,
-                    ChapterDetails = new[]
-                    {
-                        new ChapterDetailDto { ChapterId = 3, QuestionCount = 20, DifficultyLevel = "medium" },
-                        new ChapterDetailDto { ChapterId = 4, QuestionCount = 15, DifficultyLevel = "medium" },
-                        new ChapterDetailDto { ChapterId = 1, QuestionCount = 5, DifficultyLevel = "hard" }
-                    }
-                }
-            };
+                        TemplateName = t.TemplateName,
+                        ExamType = t.ExamType,
+                        Grade = t.TargetGrade,
+                        Duration = t.DurationMinutes,
+                        TotalQuestions = t.TotalQuestions,
+                        TotalPoints = 10,
+                        ChapterDetails = new ChapterDetailDto[] { } // Simplified - no template details hardcoded
+                    })
+                    .ToListAsync();
 
-            return Ok(new ApiResponse<List<ExamTemplateDto>>
+                if (!templatesFromDb.Any())
+                {
+                    return Ok(new ApiResponse<List<ExamTemplateDto>>
+                    {
+                        Success = true,
+                        Message = "❌ KHÔNG CÓ TEMPLATE TRONG DATABASE! Vui lòng tạo templates hoặc sử dụng tính năng tạo đề thi tùy chỉnh.",
+                        Data = new List<ExamTemplateDto>()
+                    });
+                }
+
+                return Ok(new ApiResponse<List<ExamTemplateDto>>
+                {
+                    Success = true,
+                    Message = $"Lấy {templatesFromDb.Count} templates từ database thành công",
+                    Data = templatesFromDb
+                });
+            }
+            catch (Exception ex)
             {
-                Success = true,
-                Message = "Lấy template thành công",
-                Data = templates
-            });
+                _logger.LogError(ex, "Error getting exam templates from database");
+                return StatusCode(500, new ApiResponse<List<ExamTemplateDto>>
+                {
+                    Success = false,
+                    Message = $"❌ LỖI DATABASE TEMPLATES: {ex.Message}"
+                });
+            }
         }
 
         private async Task<List<QuestionDto>> GetQuestionsForChapter(int chapterId, int count, string difficulty)
@@ -522,10 +516,8 @@ namespace BE_Phygens.Controllers
                     catch (Exception aiEx)
                     {
                         _logger.LogError(aiEx, $"Error generating AI question {i + 1}: {aiEx.Message}");
-
-                        // Create a fallback question if AI fails
-                        var fallbackQuestion = CreateFallbackQuestion(chapter, difficulty, i + 1);
-                        questions.Add(fallbackQuestion);
+                        // ❌ REMOVED: No fallback questions allowed - AI must work or fail completely
+                        throw new InvalidOperationException($"❌ AI KHÔNG THỂ TẠO CÂU HỎI {i + 1}! Lỗi: {aiEx.Message}");
                     }
 
                     // Small delay to avoid rate limiting
@@ -550,26 +542,8 @@ namespace BE_Phygens.Controllers
 
         private QuestionDto CreateFallbackQuestion(Chapter chapter, string difficulty, int questionNumber)
         {
-            var questionId = Guid.NewGuid().ToString();
-
-            return new QuestionDto
-            {
-                QuestionId = questionId,
-                Topic = chapter.ChapterName,
-                QuestionText = $"Câu hỏi {questionNumber} về {chapter.ChapterName} (Lớp {chapter.Grade}) - Độ khó: {difficulty}",
-                QuestionType = "multiple_choice",
-                Difficulty = difficulty,
-                ChapterId = chapter.ChapterId,
-                CreatedBy = "AI_System_Fallback",
-                CreatedAt = DateTime.UtcNow,
-                AnswerChoices = new List<AnswerChoiceDto>
-                {
-                    new() { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "A", ChoiceText = "Đáp án A", IsCorrect = true, DisplayOrder = 1 },
-                    new() { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "B", ChoiceText = "Đáp án B", IsCorrect = false, DisplayOrder = 2 },
-                    new() { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "C", ChoiceText = "Đáp án C", IsCorrect = false, DisplayOrder = 3 },
-                    new() { ChoiceId = Guid.NewGuid().ToString(), ChoiceLabel = "D", ChoiceText = "Đáp án D", IsCorrect = false, DisplayOrder = 4 }
-                }
-            };
+            // ❌ REMOVED: No more fallback questions - only real AI generated questions allowed
+            throw new InvalidOperationException($"❌ KHÔNG THỂ TẠO FALLBACK QUESTION! Chỉ được phép sử dụng câu hỏi AI thật hoặc từ database. Chapter: {chapter.ChapterName}, Difficulty: {difficulty}, Question: {questionNumber}");
         }
 
         private async Task<List<QuestionDto>> GetQuestionsFromDatabaseFallback(int chapterId, int count, string difficulty, Chapter chapter)
@@ -609,26 +583,15 @@ namespace BE_Phygens.Controllers
                     return dbQuestions;
                 }
 
-                // If no database questions either, create fallback questions
-                _logger.LogWarning("No questions found in database, creating fallback questions");
-                var fallbackQuestions = new List<QuestionDto>();
-                for (int i = 0; i < count; i++)
-                {
-                    fallbackQuestions.Add(CreateFallbackQuestion(chapter, difficulty, i + 1));
-                }
-                return fallbackQuestions;
+                // ❌ REMOVED: No fallback questions allowed
+                throw new InvalidOperationException($"❌ KHÔNG TÌM THẤY CÂU HỎI TRONG DATABASE! Chapter: {chapter.ChapterName}, Difficulty: {difficulty}, Count: {count}. Vui lòng thêm câu hỏi vào database hoặc đảm bảo AI service hoạt động.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in database fallback");
 
-                // Last resort: create mock questions
-                var mockQuestions = new List<QuestionDto>();
-                for (int i = 0; i < count; i++)
-                {
-                    mockQuestions.Add(CreateFallbackQuestion(chapter, difficulty, i + 1));
-                }
-                return mockQuestions;
+                // ❌ REMOVED: No mock questions allowed
+                throw new InvalidOperationException($"❌ LỖI DATABASE FALLBACK! Chapter: {chapter.ChapterName}, Difficulty: {difficulty}. Error: {ex.Message}");
             }
         }
 
@@ -680,4 +643,4 @@ namespace BE_Phygens.Controllers
             }
         }
     }
-}
+} 
