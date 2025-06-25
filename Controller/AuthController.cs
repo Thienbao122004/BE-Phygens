@@ -401,49 +401,49 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Debug endpoint to create admin user (Remove in production)
         /// </summary>
-        [HttpPost("debug/create-admin")]
-        public async Task<ActionResult<ApiResponse<object>>> CreateAdminUser()
-        {
-            try
-            {
-                // Check if admin already exists
-                var existingAdmin = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Role == "admin");
+    //     [HttpPost("debug/create-admin")]
+    //     public async Task<ActionResult<ApiResponse<object>>> CreateAdminUser()
+    //     {
+    //         try
+    //         {
+    //             // Check if admin already exists
+    //             var existingAdmin = await _context.Users
+    //                 .FirstOrDefaultAsync(u => u.Role == "admin");
 
-                if (existingAdmin != null)
-                {
-                    return BadRequest(ApiResponse<object>.ErrorResult("Admin user already exists"));
-                }
+    //             if (existingAdmin != null)
+    //             {
+    //                 return BadRequest(ApiResponse<object>.ErrorResult("Admin user already exists"));
+    //             }
 
-                var adminUser = new User
-                {
-                    UserId = Guid.NewGuid().ToString(),
-                    Username = "admin",
-                    Email = "admin@phygens.com",
-                    FullName = "System Administrator",
-                    Role = "admin",
-                    PasswordHash = HashPassword("admin123"), // Default password
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true
-                };
+    //             var adminUser = new User
+    //             {
+    //                 UserId = Guid.NewGuid().ToString(),
+    //                 Username = "admin",
+    //                 Email = "admin@phygens.com",
+    //                 FullName = "System Administrator",
+    //                 Role = "admin",
+    //                 PasswordHash = HashPassword("admin123"), // Default password
+    //                 CreatedAt = DateTime.UtcNow,
+    //                 IsActive = true
+    //             };
 
-                _context.Users.Add(adminUser);
-                await _context.SaveChangesAsync();
+    //             _context.Users.Add(adminUser);
+    //             await _context.SaveChangesAsync();
 
-                return Ok(ApiResponse<object>.SuccessResult(new
-                {
-                    message = "Admin user created successfully",
-                    username = "admin",
-                    password = "admin123",
-                    note = "Please change the password after first login"
-                }, "Admin user created"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred while creating admin user", new List<string> { ex.Message }));
-            }
-        }
+    //             return Ok(ApiResponse<object>.SuccessResult(new
+    //             {
+    //                 message = "Admin user created successfully",
+    //                 username = "admin",
+    //                 password = "admin123",
+    //                 note = "Please change the password after first login"
+    //             }, "Admin user created"));
+    //         }
+    //         catch (Exception ex)
+    //         {
+    //             return StatusCode(500, ApiResponse<object>.ErrorResult(
+    //                 "An error occurred while creating admin user", new List<string> { ex.Message }));
+    //         }
+    //     }
 
         private static string HashPassword(string password)
         {
@@ -476,37 +476,37 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Debug: Check user in database
-        /// </summary>
-        [HttpGet("debug/user/{username}")]
-        public async Task<ActionResult<ApiResponse<object>>> DebugUser(string username)
-        {
-            try
-            {
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Username == username);
+    //     /// <summary>
+    //     /// Debug: Check user in database
+    //     /// </summary>
+    //     [HttpGet("debug/user/{username}")]
+    //     public async Task<ActionResult<ApiResponse<object>>> DebugUser(string username)
+    //     {
+    //         try
+    //         {
+    //             var user = await _context.Users
+    //                 .AsNoTracking()
+    //                 .FirstOrDefaultAsync(u => u.Username == username);
 
-                if (user == null)
-                {
-                    return NotFound(ApiResponse<object>.ErrorResult("User not found"));
-                }
+    //             if (user == null)
+    //             {
+    //                 return NotFound(ApiResponse<object>.ErrorResult("User not found"));
+    //             }
 
-                return Ok(ApiResponse<object>.SuccessResult(new 
-                { 
-                    username = user.Username,
-                    email = user.Email,
-                    password_hash = user.PasswordHash,
-                    is_active = user.IsActive,
-                    role = user.Role
-                }, "User found"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "Error checking user", new List<string> { ex.Message }));
-            }
-        }
+    //             return Ok(ApiResponse<object>.SuccessResult(new 
+    //             { 
+    //                 username = user.Username,
+    //                 email = user.Email,
+    //                 password_hash = user.PasswordHash,
+    //                 is_active = user.IsActive,
+    //                 role = user.Role
+    //             }, "User found"));
+    //         }
+    //         catch (Exception ex)
+    //         {
+    //             return StatusCode(500, ApiResponse<object>.ErrorResult(
+    //                 "Error checking user", new List<string> { ex.Message }));
+    //         }
+    //     }
     }
 } 

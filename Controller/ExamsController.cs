@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using BE_Phygens.DTOs;
+using BE_Phygens.Dto;
 using BE_Phygens.Models;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -19,6 +19,13 @@ namespace BE_Phygens.Controllers
         public ExamsController(PhygensContext context)
         {
             _context = context;
+        }
+
+        private static readonly string[] ValidExamTypes = { "15p", "1tiet", "cuoiky", "ai_generated", "smart_exam", "adaptive" };
+
+        private string ValidateExamType(string examType, string fallback = "ai_generated")
+        {
+            return ValidExamTypes.Contains(examType) ? examType : fallback;
         }
 
         private string? ConvertToJsonString(object? value)
@@ -47,7 +54,7 @@ namespace BE_Phygens.Controllers
                     .ThenInclude(q => q.Topic)
                     .ToListAsync();
             
-            var examDtos = exams.Select(e => new ExamDto
+            var examDtos = exams.Select(e => new ExamDetailsDto
             {
                 ExamId = e.ExamId,
                 ExamName = e.ExamName,
@@ -57,20 +64,20 @@ namespace BE_Phygens.Controllers
                 CreatedBy = e.CreatedBy,
                 IsPublished = e.IsPublished,
                 CreatedAt = e.CreatedAt,
-                Questions = e.ExamQuestions?.Select(eq => new ExamQuestionDto
+                Questions = e.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
                 {
                     ExamQuestionId = eq.ExamQuestionId,
                     QuestionId = eq.QuestionId,
                     QuestionOrder = eq.QuestionOrder ?? 0,
                     PointsWeight = eq.PointsWeight,
-                    Question = eq.Question != null ? new QuestionDto
+                    Question = eq.Question != null ? new QuestionResponseDto
                     {
                         QuestionId = eq.Question.QuestionId,
                         QuestionText = eq.Question.QuestionText,
                         Difficulty = eq.Question.DifficultyLevel,
                         Topic = eq.Question.Topic?.TopicName ?? ""
                     } : null
-                }).ToList() ?? new List<ExamQuestionDto>()
+                }).ToList() ?? new List<ExamQuestionResponseDto>()
             }).ToList();
 
                 return Ok(examDtos);
@@ -100,7 +107,7 @@ namespace BE_Phygens.Controllers
 
             if (exam == null) return NotFound();
 
-            var examDto = new ExamDto
+            var examDto = new ExamDetailsDto
             {
                 ExamId = exam.ExamId,
                 ExamName = exam.ExamName,
@@ -110,28 +117,28 @@ namespace BE_Phygens.Controllers
                 CreatedBy = exam.CreatedBy,
                 IsPublished = exam.IsPublished,
                 CreatedAt = exam.CreatedAt,
-                Questions = exam.ExamQuestions?.Select(eq => new ExamQuestionDto
+                Questions = exam.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
                 {
                     ExamQuestionId = eq.ExamQuestionId,
                     QuestionId = eq.QuestionId,
                     QuestionOrder = eq.QuestionOrder ?? 0,
                     PointsWeight = eq.PointsWeight,
-                    Question = eq.Question != null ? new QuestionDto
+                    Question = eq.Question != null ? new QuestionResponseDto
                     {
                         QuestionId = eq.Question.QuestionId,
                         QuestionText = eq.Question.QuestionText,
                         Difficulty = eq.Question.DifficultyLevel,
                         Topic = eq.Question.Topic?.TopicName ?? "",
-                        AnswerChoices = eq.Question.AnswerChoices?.Select(ac => new AnswerChoiceDto
+                        AnswerChoices = eq.Question.AnswerChoices?.Select(ac => new AnswerChoiceResponseDto
                         {
                             ChoiceId = ac.ChoiceId,
                             ChoiceLabel = ac.ChoiceLabel,
                             ChoiceText = ac.ChoiceText,
                             IsCorrect = ac.IsCorrect,
                             DisplayOrder = ac.DisplayOrder ?? 0
-                        }).ToList() ?? new List<AnswerChoiceDto>()
+                        }).ToList() ?? new List<AnswerChoiceResponseDto>()
                     } : null
-                }).ToList() ?? new List<ExamQuestionDto>()
+                }).ToList() ?? new List<ExamQuestionResponseDto>()
             };
 
             return Ok(examDto);
@@ -141,42 +148,26 @@ namespace BE_Phygens.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateExam([FromBody] ExamCreateDto examDto)
         {
+            // Validate ExamType to ensure it matches database constraint
+            var examType = ValidateExamType(examDto.ExamType);
+
+            // Get or create default user if CreatedBy is not provided
+            var createdBy = !string.IsNullOrEmpty(examDto.CreatedBy) ? examDto.CreatedBy : GetOrCreateDefaultUser();
+
             // Check if exam with same name and config already exists
             if (!string.IsNullOrEmpty(examDto.ExamName))
             {
                 var existingExam = await _context.Exams
                     .Where(e => e.ExamName == examDto.ExamName && 
-                               e.CreatedBy == examDto.CreatedBy &&
-                               e.ExamType == examDto.ExamType)
+                               e.CreatedBy == createdBy &&
+                               e.ExamType == examType)
                     .FirstOrDefaultAsync();
 
                 if (existingExam != null)
                 {
-                    Console.WriteLine($"Exam already exists: {existingExam.ExamId}");
-                    return Ok(new { 
-                        success = true, 
-                        data = existingExam,
-                        message = "Exam already exists, returning existing exam" 
-                    });
-                }
-            }
-            // FIX: Validate user exists
-            var userExists = await _context.Users.AnyAsync(u => u.UserId == examDto.CreatedBy);
-            if (!userExists)
-            {
-                // Try to find any admin/teacher user as fallback
-                var fallbackUser = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Role == "admin" );
-                
-                if (fallbackUser != null)
-                {
-                    examDto.CreatedBy = fallbackUser.UserId;
-                }
-                else
-                {
                     return BadRequest(new { 
-                        error = "Invalid user and no fallback user available",
-                        providedUser = examDto.CreatedBy 
+                        error = "Exam with same name and configuration already exists", 
+                        existingExamId = existingExam.ExamId 
                     });
                 }
             }
@@ -233,9 +224,10 @@ namespace BE_Phygens.Controllers
                 ExamName = examDto.ExamName,
                 Description = examDto.Description,
                 DurationMinutes = examDto.DurationMinutes,
-                ExamType = examDto.ExamType,
-                CreatedBy = examDto.CreatedBy,
-                IsPublished = false,
+                ExamType = examType, 
+                CreatedBy = createdBy, 
+                IsPublished = false, 
+                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam", 
                 CreatedAt = DateTime.UtcNow,
                 AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig)
             };
@@ -244,24 +236,27 @@ namespace BE_Phygens.Controllers
 
             if (examDto.Questions != null && examDto.Questions.Any())
             {
-                // Check for existing ExamQuestions to avoid duplicates
-                var existingExamQuestions = await _context.ExamQuestions
-                    .Where(eq => eq.ExamId == exam.ExamId)
-                    .Select(eq => new { eq.QuestionId, eq.QuestionOrder })
+                // Remove duplicates from the request itself
+                var uniqueQuestions = examDto.Questions
+                    .GroupBy(q => q.QuestionId)
+                    .Select(g => g.First())
+                    .ToList();
+
+                Console.WriteLine($"📝 Processing {uniqueQuestions.Count} unique questions for exam {exam.ExamId}");
+
+                // Since this is a new exam, no existing ExamQuestions to check
+                // Just verify questions exist in database and add them
+                var questionIds = uniqueQuestions.Select(q => q.QuestionId).ToList();
+                var existingQuestionIds = await _context.Questions
+                    .Where(q => questionIds.Contains(q.QuestionId))
+                    .Select(q => q.QuestionId)
                     .ToListAsync();
 
-                foreach (var questionDto in examDto.Questions)
+                var validQuestions = uniqueQuestions
+                    .Where(q => existingQuestionIds.Contains(q.QuestionId))
+                    .ToList();
+                foreach (var questionDto in validQuestions)
                 {
-                    // Skip if this question already exists in this exam
-                    var exists = existingExamQuestions.Any(eq => 
-                        eq.QuestionId == questionDto.QuestionId);
-                    
-                    if (exists)
-                    {
-                        Console.WriteLine($"Skipping duplicate question {questionDto.QuestionId} for exam {exam.ExamId}");
-                        continue;
-                    }
-
                     var examQuestion = new ExamQuestion
                     {
                         ExamQuestionId = Guid.NewGuid().ToString(),
@@ -272,6 +267,16 @@ namespace BE_Phygens.Controllers
                         AddedAt = DateTime.UtcNow
                     };
                     _context.ExamQuestions.Add(examQuestion);
+                }
+
+                var missingQuestions = uniqueQuestions
+                    .Where(q => !existingQuestionIds.Contains(q.QuestionId))
+                    .Select(q => q.QuestionId)
+                    .ToList();
+
+                if (missingQuestions.Any())
+                {
+                    Console.WriteLine($"⚠️ Questions not found in database: {string.Join(", ", missingQuestions)}");
                 }
             }
 
@@ -286,6 +291,9 @@ namespace BE_Phygens.Controllers
         {
             var exam = await _context.Exams.FindAsync(id);
             if (exam == null) return NotFound();
+
+            // Validate ExamType to ensure it matches database constraint
+            var examType = ValidateExamType(examDto.ExamType, exam.ExamType);
 
             // Validate questions exist if provided
             if (examDto.Questions != null && examDto.Questions.Any())
@@ -309,7 +317,7 @@ namespace BE_Phygens.Controllers
             exam.ExamName = examDto.ExamName;
             exam.Description = examDto.Description;
             exam.DurationMinutes = examDto.DurationMinutes;
-            exam.ExamType = examDto.ExamType;
+            exam.ExamType = examType; // ✅ Sử dụng validated ExamType
             exam.IsPublished = examDto.IsPublished;
             exam.AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig);
 
@@ -363,83 +371,166 @@ namespace BE_Phygens.Controllers
         [HttpPost("generate")]
         public async Task<IActionResult> GenerateExam([FromBody] ExamGenerateDto generateDto)
         {
+            // Validate ExamType to ensure it matches database constraint
+            var examType = ValidateExamType(generateDto.ExamType);
+            
+            // Get or create default user if CreatedBy is not provided
+            var createdBy = !string.IsNullOrEmpty(generateDto.CreatedBy) ? generateDto.CreatedBy : GetOrCreateDefaultUser();
+            
             var exam = new Exam
             {
                 ExamId = Guid.NewGuid().ToString(),
                 ExamName = generateDto.ExamName,
                 Description = generateDto.Description,
                 DurationMinutes = generateDto.DurationMinutes,
-                ExamType = generateDto.ExamType,
-                CreatedBy = generateDto.CreatedBy,
+                ExamType = examType, 
+                CreatedBy = createdBy, // ✅ Sử dụng validated CreatedBy
                 IsPublished = false,
+                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam", 
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Exams.Add(exam);
 
-            // Generate questions based on matrix
+            // Generate questions based on different input formats
             var questions = new List<ExamQuestion>();
             int order = 1;
-            foreach (var matrix in generateDto.Matrix)
+
+            // ✅ NEW: Handle chapterId + questionCount format (from frontend)
+            if (generateDto.ChapterId.HasValue && generateDto.QuestionCount.HasValue)
             {
-                // FIX: Get questions from database based on difficulty and topic
-                var availableQuestions = await _context.Questions
-                    .Include(q => q.Topic)
-                    .Where(q => q.DifficultyLevel.ToLower() == "easy" && q.Topic.TopicName == matrix.Topic)
-                    .Take(matrix.NumEasy)
-                    .ToListAsync();
-
-                foreach (var question in availableQuestions)
+                var chapter = await _context.Chapters.FindAsync(generateDto.ChapterId.Value);
+                if (chapter != null)
                 {
-                    questions.Add(new ExamQuestion
+                    // Try to get questions from database first
+                    var dbQuestions = await _context.Questions
+                        .Where(q => q.ChapterId == generateDto.ChapterId.Value && q.IsActive)
+                        .OrderBy(x => Guid.NewGuid()) // Random order
+                        .Take(generateDto.QuestionCount.Value)
+                        .ToListAsync();
+
+                    foreach (var question in dbQuestions)
                     {
-                        ExamQuestionId = Guid.NewGuid().ToString(),
-                        ExamId = exam.ExamId,
-                        QuestionId = question.QuestionId,
-                        QuestionOrder = order++,
-                        PointsWeight = 1,
-                        AddedAt = DateTime.UtcNow
-                    });
+                        questions.Add(new ExamQuestion
+                        {
+                            ExamQuestionId = Guid.NewGuid().ToString(),
+                            ExamId = exam.ExamId,
+                            QuestionId = question.QuestionId,
+                            QuestionOrder = order++,
+                            PointsWeight = 1,
+                            AddedAt = DateTime.UtcNow
+                        });
+                    }
+
+                    // If not enough questions from DB, create placeholder questions
+                    int remaining = generateDto.QuestionCount.Value - dbQuestions.Count;
+                    if (remaining > 0)
+                    {
+                        // ✅ Create placeholder questions in DB first, then add to exam
+                        var placeholderQuestions = new List<Question>();
+                        
+                        for (int i = 0; i < remaining; i++)
+                        {
+                            var placeholderQuestion = new Question
+                            {
+                                QuestionId = Guid.NewGuid().ToString(),
+                                QuestionText = $"[AI Generated Question {i + 1}] - {chapter.ChapterName}",
+                                QuestionType = "multiple_choice",
+                                DifficultyLevel = generateDto.DifficultyLevel ?? "medium",
+                                CreatedBy = createdBy,
+                                CreatedAt = DateTime.UtcNow,
+                                TopicId = "TOPIC_001", // Default topic
+                                ChapterId = generateDto.ChapterId.Value,
+                                IsActive = true,
+                                AiGenerated = true
+                            };
+
+                            _context.Questions.Add(placeholderQuestion);
+                            placeholderQuestions.Add(placeholderQuestion);
+                        }
+                        
+                        // ✅ Save placeholder questions to database first
+                        await _context.SaveChangesAsync();
+                        
+                        // ✅ Now create ExamQuestions with valid QuestionIds
+                        foreach (var placeholderQuestion in placeholderQuestions)
+                        {
+                            questions.Add(new ExamQuestion
+                            {
+                                ExamQuestionId = Guid.NewGuid().ToString(),
+                                ExamId = exam.ExamId,
+                                QuestionId = placeholderQuestion.QuestionId, // ✅ Now exists in DB
+                                QuestionOrder = order++,
+                                PointsWeight = 1,
+                                AddedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
                 }
-
-                // Add medium questions
-                var mediumQuestions = await _context.Questions
-                    .Include(q => q.Topic)
-                    .Where(q => q.DifficultyLevel.ToLower() == "medium" && q.Topic.TopicName == matrix.Topic)
-                    .Take(matrix.NumMedium)
-                    .ToListAsync();
-
-                foreach (var question in mediumQuestions)
+            }
+            // ✅ OLD: Handle Matrix format (legacy)
+            else if (generateDto.Matrix != null && generateDto.Matrix.Any())
+            {
+                foreach (var matrix in generateDto.Matrix)
                 {
-                    questions.Add(new ExamQuestion
-                    {
-                        ExamQuestionId = Guid.NewGuid().ToString(),
-                        ExamId = exam.ExamId,
-                        QuestionId = question.QuestionId,
-                        QuestionOrder = order++,
-                        PointsWeight = 1,
-                        AddedAt = DateTime.UtcNow
-                    });
-                }
+                    // Get questions from database based on difficulty and topic
+                    var availableQuestions = await _context.Questions
+                        .Include(q => q.Topic)
+                        .Where(q => q.DifficultyLevel.ToLower() == "easy" && q.Topic.TopicName == matrix.Topic)
+                        .Take(matrix.NumEasy)
+                        .ToListAsync();
 
-                // Add hard questions
-                var hardQuestions = await _context.Questions
-                    .Include(q => q.Topic)
-                    .Where(q => q.DifficultyLevel == "Hard" && q.Topic.TopicName == matrix.Topic)
-                    .Take(matrix.NumHard)
-                    .ToListAsync();
-
-                foreach (var question in hardQuestions)
-                {
-                    questions.Add(new ExamQuestion
+                    foreach (var question in availableQuestions)
                     {
-                        ExamQuestionId = Guid.NewGuid().ToString(),
-                        ExamId = exam.ExamId,
-                        QuestionId = question.QuestionId,
-                        QuestionOrder = order++,
-                        PointsWeight = 1,
-                        AddedAt = DateTime.UtcNow
-                    });
+                        questions.Add(new ExamQuestion
+                        {
+                            ExamQuestionId = Guid.NewGuid().ToString(),
+                            ExamId = exam.ExamId,
+                            QuestionId = question.QuestionId,
+                            QuestionOrder = order++,
+                            PointsWeight = 1,
+                            AddedAt = DateTime.UtcNow
+                        });
+                    }
+
+                    // Add medium and hard questions...
+                    var mediumQuestions = await _context.Questions
+                        .Include(q => q.Topic)
+                        .Where(q => q.DifficultyLevel.ToLower() == "medium" && q.Topic.TopicName == matrix.Topic)
+                        .Take(matrix.NumMedium)
+                        .ToListAsync();
+
+                    foreach (var question in mediumQuestions)
+                    {
+                        questions.Add(new ExamQuestion
+                        {
+                            ExamQuestionId = Guid.NewGuid().ToString(),
+                            ExamId = exam.ExamId,
+                            QuestionId = question.QuestionId,
+                            QuestionOrder = order++,
+                            PointsWeight = 1,
+                            AddedAt = DateTime.UtcNow
+                        });
+                    }
+
+                    var hardQuestions = await _context.Questions
+                        .Include(q => q.Topic)
+                        .Where(q => q.DifficultyLevel == "Hard" && q.Topic.TopicName == matrix.Topic)
+                        .Take(matrix.NumHard)
+                        .ToListAsync();
+
+                    foreach (var question in hardQuestions)
+                    {
+                        questions.Add(new ExamQuestion
+                        {
+                            ExamQuestionId = Guid.NewGuid().ToString(),
+                            ExamId = exam.ExamId,
+                            QuestionId = question.QuestionId,
+                            QuestionOrder = order++,
+                            PointsWeight = 1,
+                            AddedAt = DateTime.UtcNow
+                        });
+                    }
                 }
             }
 
@@ -447,6 +538,55 @@ namespace BE_Phygens.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetExamById), new { id = exam.ExamId }, exam);
+        }
+
+        private string GetOrCreateDefaultUser()
+        {
+            try
+            {
+                // Try to get ai_system user first
+                var aiSystemUser = _context.Users.FirstOrDefault(u => u.UserId == "ai_system");
+                if (aiSystemUser != null)
+                {
+                    return aiSystemUser.UserId;
+                }
+
+                // If no ai_system, get any admin user
+                var adminUser = _context.Users.FirstOrDefault(u => u.Role == "admin");
+                if (adminUser != null)
+                {
+                    return adminUser.UserId;
+                }
+
+                // If no admin user found, get first user
+                var anyUser = _context.Users.FirstOrDefault();
+                if (anyUser != null)
+                {
+                    return anyUser.UserId;
+                }
+
+                // If no user found, create ai_system user
+                var newAiUser = new User
+                {
+                    UserId = "ai_system",
+                    Username = "ai_system",
+                    Email = "ai@phygens.com",
+                    FullName = "AI System",
+                    Role = "admin",
+                    PasswordHash = "hashed_password_ai_system", // Simple hash for demo
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.Users.Add(newAiUser);
+                _context.SaveChanges(); // Save immediately to ensure user exists
+
+                return newAiUser.UserId;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Cannot create or find default user: {ex.Message}");
+            }
         }
     }
 }

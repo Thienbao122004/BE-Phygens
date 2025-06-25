@@ -29,6 +29,7 @@ namespace BE_Phygens.Models
         public int NumHard { get; set; } = 0;
 
         [Column("totalquestions")]
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         public int TotalQuestions { get; set; } = 0;
 
         [Column("createdat")]

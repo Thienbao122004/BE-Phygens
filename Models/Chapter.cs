@@ -38,11 +38,11 @@ namespace BE_Phygens.Models
     }
 
     // Bảng trung gian cho ExamMatrix - Chapter (n-n)
-    [Table("ExamMatrixDetail")]
+    [Table("exammatrixdetail")]
     public class ExamMatrixDetail
     {
         [Key]
-        [Column("Id")]
+        [Column("id")]
         public int Id { get; set; }
         
         [Column("exammatrixid")]

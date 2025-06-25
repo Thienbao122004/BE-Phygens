@@ -25,6 +25,9 @@ namespace BE_Phygens.Models
         public const string FifteenMinutes = "15p";
         public const string OneLesson = "1tiet";
         public const string FinalExam = "cuoiky";
+        public const string AIGenerated = "ai_generated";
+        public const string SmartExam = "smart_exam";
+        public const string Adaptive = "adaptive";
     }
 
     public static class AttemptStatuses
