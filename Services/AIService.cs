@@ -49,6 +49,10 @@ namespace BE_Phygens.Services
                     "openai" => await GenerateWithOpenAIAsync(chapter, request),
                     "gemini" => await GenerateWithGeminiAsync(chapter, request),
                     "claude" => await GenerateWithClaudeAsync(chapter, request),
+                    "groq" => await GenerateWithGroqAsync(chapter, request),
+                    "huggingface" => await GenerateWithHuggingFaceAsync(chapter, request),
+                    "togetherai" => await GenerateWithTogetherAIAsync(chapter, request),
+                    "openrouter" => await GenerateWithOpenRouterAsync(chapter, request),
                     _ => CreateMockQuestion(chapter, request)
                 };
 
@@ -339,44 +343,38 @@ namespace BE_Phygens.Services
 
                 _logger.LogInformation($"Testing AI connection with provider: {provider}");
 
-                // Force Gemini only
-                if (provider != "gemini")
+                string response = provider switch
                 {
-                    _logger.LogError($"Provider '{provider}' not supported. Only Gemini allowed.");
-                    return false;
-                }
+                    "openai" => await CallOpenAIAsync(testPrompt),
+                    "gemini" => await CallGeminiAsync(testPrompt),
+                    "claude" => await CallClaudeAsync(testPrompt),
+                    "groq" => await CallGroqAsync(testPrompt),
+                    "huggingface" => await CallHuggingFaceAsync(testPrompt),
+                    "togetherai" => await CallTogetherAIAsync(testPrompt),
+                    "openrouter" => await CallOpenRouterAsync(testPrompt),
+                    _ => "mock response"
+                };
 
-                // Check API key first
-                var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? _configuration["AI:Gemini:ApiKey"];
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    _logger.LogError("Gemini API key not configured");
-                    return false;
-                }
-
-                _logger.LogInformation($"API key configured: {apiKey.Substring(0, Math.Min(10, apiKey.Length))}...");
-
-                var response = await CallGeminiAsync(testPrompt);
-                _logger.LogInformation($"Gemini response received: '{response}' (Length: {response?.Length ?? 0})");
+                _logger.LogInformation($"{provider} response received: '{response}' (Length: {response?.Length ?? 0})");
 
                 var isSuccess = !string.IsNullOrEmpty(response) && response.Trim().Length > 0;
-                _logger.LogInformation($"Gemini connection test result: {isSuccess}");
+                _logger.LogInformation($"{provider} connection test result: {isSuccess}");
                 
                 return isSuccess;
             }
             catch (HttpRequestException httpEx) when (httpEx.Message.Contains("429") || httpEx.Message.Contains("Too Many Requests"))
             {
-                _logger.LogWarning("Gemini API rate limited - connection is working but throttled");
+                _logger.LogWarning("AI API rate limited - connection is working but throttled");
                 return true; // Rate limit means API is reachable
             }
             catch (Exception ex) when (ex.Message.Contains("rate limited"))
             {
-                _logger.LogWarning("Gemini API rate limited - connection is working but throttled");
+                _logger.LogWarning("AI API rate limited - connection is working but throttled");
                 return true; // Rate limit means API is reachable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Gemini connection test failed");
+                _logger.LogError(ex, "AI connection test failed");
                 return false;
             }
         }
@@ -421,6 +419,62 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallClaudeAsync(prompt);
+            
+            return ParseAIQuestionResponse(response, chapter, request);
+        }
+
+        private async Task<QuestionDto> GenerateWithGroqAsync(Chapter chapter, GenerateQuestionRequest request)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY") ?? _configuration["AI:Groq:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                throw new InvalidOperationException("Groq API key not configured");
+            }
+
+            var prompt = BuildPhysicsQuestionPrompt(chapter, request);
+            var response = await CallGroqAsync(prompt);
+            
+            return ParseAIQuestionResponse(response, chapter, request);
+        }
+
+        private async Task<QuestionDto> GenerateWithHuggingFaceAsync(Chapter chapter, GenerateQuestionRequest request)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? _configuration["AI:HuggingFace:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                throw new InvalidOperationException("HuggingFace API key not configured");
+            }
+
+            var prompt = BuildPhysicsQuestionPrompt(chapter, request);
+            var response = await CallHuggingFaceAsync(prompt);
+            
+            return ParseAIQuestionResponse(response, chapter, request);
+        }
+
+        private async Task<QuestionDto> GenerateWithTogetherAIAsync(Chapter chapter, GenerateQuestionRequest request)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("TOGETHER_API_KEY") ?? _configuration["AI:TogetherAI:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                throw new InvalidOperationException("Together AI API key not configured");
+            }
+
+            var prompt = BuildPhysicsQuestionPrompt(chapter, request);
+            var response = await CallTogetherAIAsync(prompt);
+            
+            return ParseAIQuestionResponse(response, chapter, request);
+        }
+
+        private async Task<QuestionDto> GenerateWithOpenRouterAsync(Chapter chapter, GenerateQuestionRequest request)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY") ?? _configuration["AI:OpenRouter:ApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                throw new InvalidOperationException("OpenRouter API key not configured");
+            }
+
+            var prompt = BuildPhysicsQuestionPrompt(chapter, request);
+            var response = await CallOpenRouterAsync(prompt);
             
             return ParseAIQuestionResponse(response, chapter, request);
         }
@@ -532,6 +586,150 @@ namespace BE_Phygens.Services
             var claudeResponse = JsonSerializer.Deserialize<ClaudeResponse>(responseContent);
             
             return claudeResponse?.Content?.FirstOrDefault()?.Text ?? "";
+        }
+
+        private async Task<string> CallGroqAsync(string prompt)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY") ?? _configuration["AI:Groq:ApiKey"];
+            var model = _configuration["AI:Groq:Model"] ?? "llama-3.3-70b-versatile";
+            var maxTokens = _configuration.GetValue<int>("AI:Groq:MaxTokens", 2048);
+            var temperature = _configuration.GetValue<double>("AI:Groq:Temperature", 0.7);
+
+            var requestBody = new
+            {
+                model = model,
+                messages = new[]
+                {
+                    new { role = "system", content = "Bạn là một giáo viên Vật lý chuyên nghiệp, tạo câu hỏi chất lượng cao cho học sinh THPT Việt Nam." },
+                    new { role = "user", content = prompt }
+                },
+                temperature = temperature,
+                max_tokens = maxTokens
+            };
+
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+            var response = await _httpClient.PostAsync(
+                "https://api.groq.com/openai/v1/chat/completions",
+                new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            );
+
+            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation($"Groq raw response: {responseContent}");
+            
+            var groqResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
+            var extractedContent = groqResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
+            
+            _logger.LogInformation($"Groq extracted content: '{extractedContent}' (Length: {extractedContent.Length})");
+            
+            return extractedContent;
+        }
+
+        private async Task<string> CallHuggingFaceAsync(string prompt)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? _configuration["AI:HuggingFace:ApiKey"];
+            var model = _configuration["AI:HuggingFace:Model"] ?? "Qwen/Qwen2.5-72B-Instruct";
+
+            var requestBody = new
+            {
+                inputs = prompt,
+                parameters = new
+                {
+                    max_new_tokens = 2048,
+                    temperature = 0.7,
+                    return_full_text = false
+                }
+            };
+
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+            var url = $"https://api-inference.huggingface.co/models/{model}";
+            
+            var response = await _httpClient.PostAsync(
+                url,
+                new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            );
+
+            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
+            
+            // HuggingFace returns array format
+            var hfResponse = JsonSerializer.Deserialize<HuggingFaceResponse[]>(responseContent);
+            
+            return hfResponse?.FirstOrDefault()?.GeneratedText ?? "";
+        }
+
+        private async Task<string> CallTogetherAIAsync(string prompt)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("TOGETHER_API_KEY") ?? _configuration["AI:TogetherAI:ApiKey"];
+            var model = _configuration["AI:TogetherAI:Model"] ?? "meta-llama/Llama-3.1-70B-Instruct-Turbo";
+            var maxTokens = _configuration.GetValue<int>("AI:TogetherAI:MaxTokens", 2048);
+            var temperature = _configuration.GetValue<double>("AI:TogetherAI:Temperature", 0.7);
+
+            var requestBody = new
+            {
+                model = model,
+                messages = new[]
+                {
+                    new { role = "system", content = "Bạn là một giáo viên Vật lý chuyên nghiệp, tạo câu hỏi chất lượng cao cho học sinh THPT Việt Nam." },
+                    new { role = "user", content = prompt }
+                },
+                temperature = temperature,
+                max_tokens = maxTokens
+            };
+
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+            var response = await _httpClient.PostAsync(
+                "https://api.together.xyz/v1/chat/completions",
+                new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            );
+
+            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var togetherResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
+            
+            return togetherResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
+        }
+
+        private async Task<string> CallOpenRouterAsync(string prompt)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY") ?? _configuration["AI:OpenRouter:ApiKey"];
+            var model = _configuration["AI:OpenRouter:Model"] ?? "microsoft/wizardlm-2-8x22b";
+            var maxTokens = _configuration.GetValue<int>("AI:OpenRouter:MaxTokens", 2048);
+            var temperature = _configuration.GetValue<double>("AI:OpenRouter:Temperature", 0.7);
+
+            var requestBody = new
+            {
+                model = model,
+                messages = new[]
+                {
+                    new { role = "system", content = "Bạn là một giáo viên Vật lý chuyên nghiệp, tạo câu hỏi chất lượng cao cho học sinh THPT Việt Nam." },
+                    new { role = "user", content = prompt }
+                },
+                temperature = temperature,
+                max_tokens = maxTokens
+            };
+
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            _httpClient.DefaultRequestHeaders.Add("HTTP-Referer", "http://localhost:5298"); // Required by OpenRouter
+
+            var response = await _httpClient.PostAsync(
+                "https://openrouter.ai/api/v1/chat/completions",
+                new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            );
+
+            response.EnsureSuccessStatusCode();
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var openRouterResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
+            
+            return openRouterResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
         }
 
         #endregion
@@ -676,16 +874,19 @@ Trả về theo định dạng JSON chính xác:
 
         private class OpenAIResponse
         {
+            [JsonPropertyName("choices")]
             public OpenAIChoice[]? Choices { get; set; }
         }
 
         private class OpenAIChoice
         {
+            [JsonPropertyName("message")]
             public OpenAIMessage? Message { get; set; }
         }
 
         private class OpenAIMessage
         {
+            [JsonPropertyName("content")]
             public string? Content { get; set; }
         }
 
@@ -744,6 +945,12 @@ Trả về theo định dạng JSON chính xác:
             public double AverageScore { get; set; }
             public List<string> WeakTopics { get; set; } = new();
             public List<string> StrongTopics { get; set; } = new();
+        }
+
+        private class HuggingFaceResponse
+        {
+            [JsonPropertyName("generated_text")]
+            public string? GeneratedText { get; set; }
         }
 
         #endregion

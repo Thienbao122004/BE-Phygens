@@ -35,21 +35,63 @@ namespace BE_Phygens.Controllers
             {
                 _logger.LogInformation($"Generating question for ChapterId: {request.ChapterId}");
                 
-                // REQUIRE REAL CHAPTER FROM DATABASE - NO DEFAULTS
-                var chapter = await _context.Set<Chapter>()
+                Chapter chapter;
+                
+                // Handle special cases
+                if (request.ChapterId <= 0)
+                {
+                    // Get available chapters and suggest one
+                    var availableChapters = await _context.Chapters
+                        .Where(c => c.IsActive)
+                        .OrderBy(c => c.Grade)
+                        .ThenBy(c => c.DisplayOrder)
+                        .Take(5)
+                        .ToListAsync();
+                    
+                    if (!availableChapters.Any())
+                    {
+                        return BadRequest(new ApiResponse<QuestionDto>
+                        {
+                            Success = false,
+                            Message = "Không có chapter nào trong database. Vui lòng seed sample data hoặc tạo chapters trước."
+                        });
+                    }
+                    
+                    var chapterList = string.Join(", ", availableChapters.Select(c => $"ID={c.ChapterId} ({c.ChapterName})"));
+                    return BadRequest(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = $"ChapterId phải > 0. Các chapters có sẵn: {chapterList}"
+                    });
+                }
+                
+                // Find specific chapter
+                chapter = await _context.Chapters
                     .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId && c.IsActive);
                 
                 if (chapter == null)
                 {
+                    // Get available chapters for helpful error message
+                    var availableChapters = await _context.Chapters
+                        .Where(c => c.IsActive)
+                        .OrderBy(c => c.Grade)
+                        .ThenBy(c => c.DisplayOrder)
+                        .Take(10)
+                        .ToListAsync();
+                    
+                    var chapterList = availableChapters.Any() 
+                        ? string.Join(", ", availableChapters.Select(c => $"ID={c.ChapterId} ({c.ChapterName})"))
+                        : "Không có chapters nào. Vui lòng seed sample data.";
+                    
                     _logger.LogError($"Chapter {request.ChapterId} not found in database");
                     return BadRequest(new ApiResponse<QuestionDto>
                     {
                         Success = false,
-                        Message = $"Chapter ID {request.ChapterId} không tồn tại trong database. Vui lòng chọn chapter hợp lệ."
+                        Message = $"Chapter ID {request.ChapterId} không tồn tại. Các chapters có sẵn: {chapterList}"
                     });
                 }
                 
-                _logger.LogInformation($"Using real chapter: {chapter.ChapterName} (Grade {chapter.Grade})");
+                _logger.LogInformation($"Using chapter: {chapter.ChapterName} (Grade {chapter.Grade})");
 
                 // Generate question using AI service
                 var questionDto = await _aiService.GenerateQuestionAsync(chapter, request);
@@ -91,7 +133,7 @@ namespace BE_Phygens.Controllers
                 
                 foreach (var spec in request.QuestionSpecs)
                 {
-                    var chapter = await _context.Set<Chapter>()
+                    var chapter = await _context.Chapters
                         .FirstOrDefaultAsync(c => c.ChapterId == spec.ChapterId && c.IsActive);
                     
                     if (chapter == null) 
@@ -195,7 +237,7 @@ namespace BE_Phygens.Controllers
         {
             try
             {
-                var chapter = await _context.Set<Chapter>()
+                var chapter = await _context.Chapters
                     .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId);
 
                 if (chapter == null)
@@ -393,11 +435,31 @@ namespace BE_Phygens.Controllers
         {
             try
             {
-                var chapters = await _context.Set<Chapter>()
+                _logger.LogInformation("Getting chapters from database...");
+                
+                // First check total count using Chapters DbSet
+                var totalCount = await _context.Chapters.CountAsync();
+                _logger.LogInformation($"Total chapters in database: {totalCount}");
+                
+                // Check active count
+                var activeCount = await _context.Chapters.Where(c => c.IsActive).CountAsync();
+                _logger.LogInformation($"Active chapters: {activeCount}");
+                
+                // Debug: Log some sample chapters
+                var sampleChapters = await _context.Chapters
+                    .Take(3)
+                    .Select(c => new { c.ChapterId, c.ChapterName, c.IsActive, c.Grade })
+                    .ToListAsync();
+                
+                _logger.LogInformation($"Sample chapters: {string.Join(", ", sampleChapters.Select(c => $"ID={c.ChapterId},Name={c.ChapterName},Active={c.IsActive},Grade={c.Grade}"))}");
+                
+                var chapters = await _context.Chapters
                     .Where(c => c.IsActive)
                     .OrderBy(c => c.Grade)
                     .ThenBy(c => c.DisplayOrder)
                     .ToListAsync();
+
+                _logger.LogInformation($"Retrieved {chapters.Count} chapters successfully");
 
                 return Ok(new ApiResponse<List<Chapter>>
                 {
@@ -442,6 +504,161 @@ namespace BE_Phygens.Controllers
                 {
                     Success = false,
                     Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Debug endpoint để kiểm tra database status
+        /// </summary>
+        [HttpGet("debug/database-status")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ApiResponse<object>>> GetDatabaseStatus()
+        {
+            try
+            {
+                _logger.LogInformation("Checking database status...");
+
+                var dbStatus = new
+                {
+                    CanConnect = await _context.Database.CanConnectAsync(),
+                    
+                    Tables = new
+                    {
+                        TotalUsers = await _context.Users.CountAsync(),
+                        ActiveUsers = await _context.Users.Where(u => u.IsActive).CountAsync(),
+                        
+                        TotalChapters = await _context.Chapters.CountAsync(),
+                        ActiveChapters = await _context.Chapters.Where(c => c.IsActive).CountAsync(),
+                        
+                        TotalQuestions = await _context.Questions.CountAsync(),
+                        ActiveQuestions = await _context.Questions.Where(q => q.IsActive).CountAsync(),
+                        
+                        TotalExams = await _context.Exams.CountAsync(),
+                        
+                        TotalPhysicsTopics = await _context.PhysicsTopics.CountAsync(),
+                        ActivePhysicsTopics = await _context.PhysicsTopics.Where(t => t.IsActive).CountAsync()
+                    },
+                    
+                    SampleChapters = await _context.Chapters
+                        .Where(c => c.IsActive)
+                        .Take(10)
+                        .Select(c => new { 
+                            c.ChapterId, 
+                            c.ChapterName, 
+                            c.Grade, 
+                            c.DisplayOrder,
+                            c.IsActive,
+                            c.CreatedAt
+                        })
+                        .ToListAsync(),
+                    
+                    SampleUsers = await _context.Users
+                        .Where(u => u.IsActive)
+                        .Take(5)
+                        .Select(u => new { 
+                            u.UserId, 
+                            u.Username, 
+                            u.Role, 
+                            u.IsActive 
+                        })
+                        .ToListAsync(),
+                    
+                    SamplePhysicsTopics = await _context.PhysicsTopics
+                        .Where(t => t.IsActive)
+                        .Take(5)
+                        .Select(t => new { 
+                            t.TopicId, 
+                            t.TopicName, 
+                            t.GradeLevel,
+                            t.IsActive 
+                        })
+                        .ToListAsync()
+                };
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Database status retrieved successfully",
+                    Data = dbStatus
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking database status");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Lỗi kiểm tra database: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Seed sample chapters cho testing
+        /// </summary>
+        [HttpPost("debug/seed-chapters")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ApiResponse<object>>> SeedSampleChapters()
+        {
+            try
+            {
+                _logger.LogInformation("Seeding sample chapters...");
+
+                // Check if chapters already exist
+                var existingCount = await _context.Chapters.CountAsync();
+                if (existingCount > 0)
+                {
+                    return Ok(new ApiResponse<object>
+                    {
+                        Success = true,
+                        Message = $"Chapters already exist: {existingCount} chapters found",
+                        Data = new { ExistingChapters = existingCount }
+                    });
+                }
+
+                // Create sample chapters
+                var sampleChapters = new List<Chapter>
+                {
+                    new Chapter { ChapterName = "Cơ học chất điểm", Grade = 10, DisplayOrder = 1, Description = "Chuyển động thẳng, chuyển động tròn", IsActive = true },
+                    new Chapter { ChapterName = "Động lực học chất điểm", Grade = 10, DisplayOrder = 2, Description = "Các định luật Newton, lực", IsActive = true },
+                    new Chapter { ChapterName = "Cân bằng và chuyển động của vật rắn", Grade = 10, DisplayOrder = 3, Description = "Momen lực, cân bằng vật rắn", IsActive = true },
+                    new Chapter { ChapterName = "Các định luật bảo toàn", Grade = 10, DisplayOrder = 4, Description = "Bảo toàn động lượng, năng lượng", IsActive = true },
+                    new Chapter { ChapterName = "Chuyển động tuần hoàn", Grade = 11, DisplayOrder = 1, Description = "Dao động điều hòa, con lắc", IsActive = true },
+                    new Chapter { ChapterName = "Sóng cơ và sóng âm", Grade = 11, DisplayOrder = 2, Description = "Truyền sóng, giao thoa sóng", IsActive = true },
+                    new Chapter { ChapterName = "Dòng điện không đổi", Grade = 11, DisplayOrder = 3, Description = "Định luật Ohm, mạch điện", IsActive = true },
+                    new Chapter { ChapterName = "Dòng điện trong các môi trường", Grade = 11, DisplayOrder = 4, Description = "Dẫn điện trong kim loại, chất điện phân", IsActive = true },
+                    new Chapter { ChapterName = "Từ trường", Grade = 12, DisplayOrder = 1, Description = "Lực từ, cảm ứng từ", IsActive = true },
+                    new Chapter { ChapterName = "Cảm ứng điện từ", Grade = 12, DisplayOrder = 2, Description = "Định luật Faraday, suất điện động", IsActive = true }
+                };
+
+                _context.Chapters.AddRange(sampleChapters);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Successfully seeded {sampleChapters.Count} sample chapters");
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = $"Đã tạo {sampleChapters.Count} sample chapters thành công",
+                    Data = new { 
+                        CreatedChapters = sampleChapters.Count,
+                        Chapters = sampleChapters.Select(c => new { 
+                            c.ChapterId, 
+                            c.ChapterName, 
+                            c.Grade, 
+                            c.DisplayOrder 
+                        }).ToList()
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error seeding sample chapters");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Lỗi tạo sample chapters: {ex.Message}"
                 });
             }
         }
@@ -609,6 +826,325 @@ namespace BE_Phygens.Controllers
                 _logger.LogWarning(ex, "Could not access PhysicsTopics table, using fallback");
                 return "TOPIC_001"; // Ultimate fallback
             }
+        }
+
+        #endregion
+
+        #region Helper Methods for ExamMatrix
+
+        private bool IsValidExamType(string examType)
+        {
+            var validTypes = GetValidExamTypes();
+            return validTypes.Contains(examType.ToLower());
+        }
+
+        private string[] GetValidExamTypes()
+        {
+            return new[] { "15p", "1tiet", "cuoiky", "giua_ki", "kiem_tra" };
+        }
+
+        private string GenerateMatrixId(string examType, int grade)
+        {
+            var prefix = examType.ToUpper();
+            var timestamp = DateTime.Now.ToString("yyyyMMddHHmm");
+            return $"MATRIX_{prefix}_G{grade}_{timestamp}";
+        }
+
+        private async Task<List<QuestionDto>> GetExistingQuestionsForChapter(
+            int chapterId, 
+            string difficultyLevel, 
+            int count,
+            List<string>? preferredTypes = null)
+        {
+            try
+            {
+                var query = _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .Include(q => q.Topic)
+                    .Where(q => q.ChapterId == chapterId && 
+                               q.DifficultyLevel == difficultyLevel && 
+                               q.IsActive);
+
+                if (preferredTypes?.Any() == true)
+                {
+                    query = query.Where(q => preferredTypes.Contains(q.QuestionType));
+                }
+
+                var questions = await query
+                    .Take(count)
+                    .ToListAsync();
+
+                return questions.Select(q => new QuestionDto
+                {
+                    QuestionId = q.QuestionId,
+                    QuestionText = q.QuestionText,
+                    QuestionType = q.QuestionType,
+                    Difficulty = q.DifficultyLevel,
+                    DifficultyLevel = q.DifficultyLevel,
+                    Topic = q.Topic?.TopicName ?? "Chưa phân loại",
+                    ImageUrl = q.ImageUrl ?? "",
+                    CreatedBy = q.CreatedBy,
+                    CreatedAt = q.CreatedAt,
+                    AnswerChoices = q.AnswerChoices?.Select(ac => new AnswerChoiceDto
+                    {
+                        ChoiceId = ac.ChoiceId,
+                        ChoiceLabel = ac.ChoiceLabel ?? "A",
+                        ChoiceText = ac.ChoiceText,
+                        IsCorrect = ac.IsCorrect,
+                        DisplayOrder = ac.DisplayOrder ?? 0
+                    }).ToList() ?? new List<AnswerChoiceDto>()
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error getting existing questions for chapter {chapterId}");
+                return new List<QuestionDto>();
+            }
+        }
+
+        private decimal CalculatePointsWeight(string difficultyLevel)
+        {
+            return difficultyLevel.ToLower() switch
+            {
+                "easy" => 0.5m,
+                "medium" => 1.0m,
+                "hard" => 1.5m,
+                _ => 1.0m
+            };
+        }
+
+        private string GetRandomQuestionType(List<string>? preferredTypes = null)
+        {
+            var availableTypes = preferredTypes?.Any() == true 
+                ? preferredTypes 
+                : new List<string> { "multiple_choice", "true_false", "essay" };
+
+            var random = new Random();
+            return availableTypes[random.Next(availableTypes.Count)];
+        }
+
+        private List<ExamQuestionDto> ShuffleQuestions(List<ExamQuestionDto> questions)
+        {
+            var random = new Random();
+            var shuffled = questions.OrderBy(x => random.Next()).ToList();
+            
+            // Update question order after shuffling
+            for (int i = 0; i < shuffled.Count; i++)
+            {
+                shuffled[i].QuestionOrder = i + 1;
+            }
+            
+            return shuffled;
+        }
+
+        private int GetDefaultDuration(string? examName)
+        {
+            if (string.IsNullOrEmpty(examName))
+                return 45;
+
+            var name = examName.ToLower();
+            if (name.Contains("15p")) return 15;
+            if (name.Contains("1tiet")) return 45;
+            if (name.Contains("cuoiky") || name.Contains("cuối kì")) return 90;
+            if (name.Contains("giua_ki") || name.Contains("giữa kì")) return 60;
+            
+            return 45; // Default
+        }
+
+        private string ExtractExamTypeFromMatrix(ExamMatrix matrix)
+        {
+            var name = matrix.ExamName?.ToLower() ?? "";
+            if (name.Contains("15p")) return "15p";
+            if (name.Contains("1tiet") || name.Contains("1 tiết")) return "1tiet";
+            if (name.Contains("cuoiky") || name.Contains("cuối kì")) return "cuoiky";
+            if (name.Contains("giua_ki") || name.Contains("giữa kì")) return "giua_ki";
+            
+            return "1tiet"; // Default
+        }
+
+        private decimal CalculateTotalPoints(ExamMatrix matrix)
+        {
+            var easyPoints = matrix.NumEasy * 0.5m;
+            var mediumPoints = matrix.NumMedium * 1.0m;
+            var hardPoints = matrix.NumHard * 1.5m;
+            
+            return easyPoints + mediumPoints + hardPoints;
+        }
+
+        #endregion
+
+        #region Helper Methods for Enhanced Questions
+
+        private string BuildAdvancedInstructions(EnhancedGenerateRequest request, List<Chapter> chapters)
+        {
+            var instructions = new List<string>();
+            
+            if (request.IncludeLearningObjectives)
+            {
+                instructions.Add("Bao gồm mục tiêu học tập rõ ràng");
+            }
+            
+            if (request.IncludeRelatedConcepts)
+            {
+                instructions.Add("Liệt kê các khái niệm liên quan");
+            }
+            
+            if (chapters.Count > 1)
+            {
+                var chapterNames = string.Join(", ", chapters.Select(c => c.ChapterName));
+                instructions.Add($"Kết hợp kiến thức từ các chương: {chapterNames}");
+            }
+            
+            if (request.Tags?.Any() == true)
+            {
+                instructions.Add($"Sử dụng các tag: {string.Join(", ", request.Tags)}");
+            }
+            
+            if (!string.IsNullOrEmpty(request.AdditionalInstructions))
+            {
+                instructions.Add(request.AdditionalInstructions);
+            }
+            
+            return string.Join(". ", instructions);
+        }
+
+        private async Task<EnhancedQuestionDto> EnhanceQuestion(QuestionDto baseQuestion, EnhancedGenerateRequest request, List<Chapter> chapters)
+        {
+            var enhanced = new EnhancedQuestionDto
+            {
+                QuestionId = baseQuestion.QuestionId,
+                Topic = baseQuestion.Topic,
+                QuestionText = baseQuestion.QuestionText,
+                QuestionType = baseQuestion.QuestionType,
+                Difficulty = baseQuestion.Difficulty,
+                DifficultyLevel = baseQuestion.DifficultyLevel,
+                ImageUrl = baseQuestion.ImageUrl,
+                CreatedBy = baseQuestion.CreatedBy,
+                CreatedAt = baseQuestion.CreatedAt,
+                AnswerChoices = baseQuestion.AnswerChoices,
+                Explanation = baseQuestion.Explanation,
+                Tags = request.Tags ?? new List<string>(),
+                LearningObjectives = GenerateLearningObjectives(baseQuestion, chapters),
+                RelatedConcepts = GenerateRelatedConcepts(baseQuestion, chapters),
+                Metadata = new QuestionMetadata
+                {
+                    LastModified = DateTime.UtcNow,
+                    ModifiedBy = "ai_system",
+                    UsageCount = 0,
+                    AverageScore = 0,
+                    DifficultyRating = GetDifficultyRating(baseQuestion.DifficultyLevel),
+                    FeedbackComments = new List<string>()
+                },
+                AIInfo = new AIGenerationInfo
+                {
+                    Provider = "Enhanced AI",
+                    Model = "enhanced-model",
+                    GeneratedAt = DateTime.UtcNow,
+                    Prompt = request.AdditionalInstructions ?? "",
+                    ConfidenceScore = 0.85,
+                    WasImproved = true,
+                    GenerationSteps = new List<string> { "Base generation", "Enhancement", "Validation" }
+                }
+            };
+
+            return enhanced;
+        }
+
+        private List<string> GenerateLearningObjectives(QuestionDto question, List<Chapter> chapters)
+        {
+            var objectives = new List<string>();
+            
+            foreach (var chapter in chapters)
+            {
+                objectives.Add($"Áp dụng kiến thức {chapter.ChapterName}");
+                objectives.Add($"Phân tích và giải quyết vấn đề liên quan đến {chapter.ChapterName}");
+            }
+            
+            return objectives.Take(3).ToList(); // Limit to 3 objectives
+        }
+
+        private List<string> GenerateRelatedConcepts(QuestionDto question, List<Chapter> chapters)
+        {
+            var concepts = new List<string>();
+            
+            foreach (var chapter in chapters)
+            {
+                concepts.Add($"Khái niệm cơ bản - {chapter.ChapterName}");
+                concepts.Add($"Ứng dụng thực tế - {chapter.ChapterName}");
+            }
+            
+            return concepts.Take(5).ToList(); // Limit to 5 concepts
+        }
+
+        private double GetDifficultyRating(string difficultyLevel)
+        {
+            return difficultyLevel.ToLower() switch
+            {
+                "easy" => 0.3,
+                "medium" => 0.6,
+                "hard" => 0.9,
+                _ => 0.5
+            };
+        }
+
+        private async Task SaveEnhancedQuestionToDatabase(EnhancedQuestionDto enhanced)
+        {
+            // Convert to regular QuestionDto for saving
+            var questionDto = new QuestionDto
+            {
+                QuestionId = enhanced.QuestionId,
+                Topic = enhanced.Topic,
+                QuestionText = enhanced.QuestionText,
+                QuestionType = enhanced.QuestionType,
+                Difficulty = enhanced.Difficulty,
+                DifficultyLevel = enhanced.DifficultyLevel,
+                Explanation = enhanced.Explanation,
+                ImageUrl = enhanced.ImageUrl,
+                CreatedBy = enhanced.CreatedBy,
+                CreatedAt = enhanced.CreatedAt,
+                AnswerChoices = enhanced.AnswerChoices
+            };
+
+            await SaveQuestionToDatabase(questionDto);
+        }
+
+        private ExamTemplateDto? GetExamTemplate(string templateName)
+        {
+            // Predefined templates - could be moved to database later
+            var templates = new Dictionary<string, ExamTemplateDto>
+            {
+                ["15p_lop10"] = new ExamTemplateDto
+                {
+                    TemplateName = "Kiểm tra 15 phút - Lớp 10",
+                    ExamType = "15p",
+                    Grade = 10,
+                    Duration = 15,
+                    TotalQuestions = 5,
+                    TotalPoints = 5,
+                    ChapterDetails = new[]
+                    {
+                        new ChapterDetailDto { ChapterId = 1, QuestionCount = 3, DifficultyLevel = "easy" },
+                        new ChapterDetailDto { ChapterId = 2, QuestionCount = 2, DifficultyLevel = "medium" }
+                    }
+                },
+                ["1tiet_lop10"] = new ExamTemplateDto
+                {
+                    TemplateName = "Kiểm tra 1 tiết - Lớp 10",
+                    ExamType = "1tiet",
+                    Grade = 10,
+                    Duration = 45,
+                    TotalQuestions = 15,
+                    TotalPoints = 10,
+                    ChapterDetails = new[]
+                    {
+                        new ChapterDetailDto { ChapterId = 1, QuestionCount = 5, DifficultyLevel = "easy" },
+                        new ChapterDetailDto { ChapterId = 2, QuestionCount = 7, DifficultyLevel = "medium" },
+                        new ChapterDetailDto { ChapterId = 3, QuestionCount = 3, DifficultyLevel = "hard" }
+                    }
+                }
+            };
+
+            return templates.TryGetValue(templateName.ToLower(), out var template) ? template : null;
         }
 
         #endregion

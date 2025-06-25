@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
-namespace BE_Phygens.DTOs
+namespace BE_Phygens.Dto
 {
     public class ExamCreateDto
     {
@@ -32,7 +33,15 @@ namespace BE_Phygens.DTOs
         public int DurationMinutes { get; set; }
         public string ExamType { get; set; } = string.Empty;
         public string CreatedBy { get; set; } = string.Empty;
-        public List<ExamMatrixDto> Matrix { get; set; } = new(); // Đề xuất: dùng cho sinh đề tự động
+        
+        public List<ExamMatrixDto> Matrix { get; set; } = new();
+        
+        public int? ChapterId { get; set; }
+        public int? QuestionCount { get; set; }
+        public string? DifficultyLevel { get; set; }
+        public bool IncludeMultipleChoice { get; set; } = true;
+        public bool IncludeEssay { get; set; } = true;
+        public int? Grade { get; set; }
     }
 
     public class ExamMatrixDto
@@ -50,7 +59,7 @@ namespace BE_Phygens.DTOs
         public decimal PointsWeight { get; set; }
     }
 
-    public class ExamDto // Dùng để trả về dữ liệu exam chi tiết
+    public class ExamDetailsDto // Dùng để trả về dữ liệu exam chi tiết - renamed from ExamDto
     {
         public string ExamId { get; set; } = string.Empty;
         public string ExamName { get; set; } = string.Empty;
@@ -60,20 +69,20 @@ namespace BE_Phygens.DTOs
         public string CreatedBy { get; set; } = string.Empty;
         public bool IsPublished { get; set; }
         public DateTime CreatedAt { get; set; }
-        public List<ExamQuestionDto> Questions { get; set; } = new();
+        public List<ExamQuestionResponseDto> Questions { get; set; } = new(); // renamed
         public object? AiGenerationConfig { get; set; } 
     }
 
-    public class ExamQuestionDto
+    public class ExamQuestionResponseDto // renamed from ExamQuestionDto to avoid conflict
     {
         public string ExamQuestionId { get; set; } = string.Empty;
         public string QuestionId { get; set; } = string.Empty;
         public int QuestionOrder { get; set; }
         public decimal PointsWeight { get; set; }
-        public QuestionDto Question { get; set; } = new();
+        public QuestionResponseDto Question { get; set; } = new(); // renamed
     }
 
-    public class QuestionDto
+    public class QuestionResponseDto // renamed from QuestionDto to avoid conflict
     {
         public string QuestionId { get; set; } = string.Empty;
         public string Topic { get; set; } = string.Empty;
@@ -83,10 +92,10 @@ namespace BE_Phygens.DTOs
         public string ImageUrl { get; set; } = string.Empty;
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
-        public List<AnswerChoiceDto> AnswerChoices { get; set; } = new();
+        public List<AnswerChoiceResponseDto> AnswerChoices { get; set; } = new(); // renamed
     }
 
-    public class AnswerChoiceDto
+    public class AnswerChoiceResponseDto // renamed from AnswerChoiceDto to avoid conflict
     {
         public string ChoiceId { get; set; } = string.Empty;
         public string ChoiceLabel { get; set; } = string.Empty;

@@ -14,6 +14,7 @@ namespace BE_Phygens.Dto
         public string DifficultyLevel { get; set; } = string.Empty; 
         public string? Explanation { get; set; } 
         public string ImageUrl { get; set; } = string.Empty;
+        public int ChapterId { get; set; } 
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public List<AnswerChoiceDto> AnswerChoices { get; set; } = new();
@@ -37,7 +38,14 @@ namespace BE_Phygens.Dto
         public int Duration { get; set; } = 45;
         public decimal TotalPoints { get; set; } = 10;
         public string? Description { get; set; }
-        public List<ChapterDetailDto> ChapterDetails { get; set; } = new();
+        public List<ChapterDetailRequest> ChapterDetails { get; set; } = new();
+    }
+
+    public class ChapterDetailRequest
+    {
+        public int ChapterId { get; set; }
+        public int QuestionCount { get; set; }
+        public string DifficultyLevel { get; set; } = "medium";
     }
 
     public class ChapterDetailDto
@@ -497,9 +505,9 @@ namespace BE_Phygens.Dto
         
         public List<string> CommonMistakes { get; set; } = new();
         
-        public double DifficultyIndex { get; set; } // 0-1, based on performance
+        public double DifficultyIndex { get; set; } 
         
-        public double DiscriminationIndex { get; set; } // how well it separates high/low performers
+        public double DiscriminationIndex { get; set; } 
     }
 
     // Import/Export DTOs
@@ -549,5 +557,53 @@ namespace BE_Phygens.Dto
         public Dictionary<string, object> FilterCriteria { get; set; } = new();
         
         public int TotalQuestions { get; set; }
+    }
+
+    public class ChapterDto
+    {
+        public int ChapterId { get; set; }
+        public string ChapterName { get; set; } = string.Empty;
+        public int Grade { get; set; }
+        public string? Description { get; set; }
+    }
+
+    // New DTOs for ExamMatrix and ExamPaper Generation
+    public class GenerateExamPaperRequest
+    {
+        public List<string>? PreferredQuestionTypes { get; set; } = new();
+        public bool SaveToDatabase { get; set; } = true;
+        public bool ShuffleQuestions { get; set; } = false;
+        public int DelayBetweenRequests { get; set; } = 1000;
+        public int? Duration { get; set; }
+    }
+
+    public class EnhancedGenerateRequest
+    {
+        [Required]
+        public List<int> ChapterIds { get; set; } = new();
+        
+        [Required]
+        public string DifficultyLevel { get; set; } = "medium";
+        
+        [Required]
+        public string QuestionType { get; set; } = "multiple_choice";
+        
+        public string? SpecificTopic { get; set; }
+        public bool SaveToDatabase { get; set; } = true;
+        public bool RandomChapterSelection { get; set; } = false;
+        public bool IncludeDetailedExplanation { get; set; } = true;
+        public bool IncludeImage { get; set; } = false;
+        public bool IncludeLearningObjectives { get; set; } = true;
+        public bool IncludeRelatedConcepts { get; set; } = true;
+        public List<string>? Tags { get; set; } = new();
+        public string? AdditionalInstructions { get; set; }
+    }
+
+    public class GenerateFromTemplateRequest
+    {
+        [Required]
+        public string TemplateName { get; set; } = string.Empty;
+        public bool SaveToDatabase { get; set; } = true;
+        public bool ShuffleQuestions { get; set; } = false;
     }
 } 
