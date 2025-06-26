@@ -40,6 +40,9 @@ namespace BE_Phygens.Controllers
             {
                 var query = _context.Users.AsNoTracking();
 
+                // Chỉ lấy các user đang active
+                query = query.Where(u => u.IsActive);
+
                 // Search functionality
                 if (!string.IsNullOrEmpty(request.Search))
                 {
