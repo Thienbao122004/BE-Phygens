@@ -20,8 +20,9 @@ namespace BE_Phygens.Controllers
             _logger = logger;
         }
 
+        // GET: analytics/dashboard
         [HttpGet("dashboard")]
-        public async Task<ActionResult<ApiResponse<DashboardDataDto>>> GetDashboard()
+        public async Task<IActionResult> GetDashboard()
         {
             try
             {
@@ -36,64 +37,59 @@ namespace BE_Phygens.Controllers
                     .Where(e => e.CreatedAt >= DateTime.UtcNow.AddDays(-30))
                     .OrderByDescending(e => e.CreatedAt)
                     .Take(10)
-                    .Select(e => new RecentActivityDto
+                    .Select(e => new
                     {
-                        Id = e.ExamId,
-                        Type = "exam_created",
-                        Title = e.ExamName,
-                        Description = $"Đề thi {e.ExamName} đã được tạo",
-                        CreatedAt = e.CreatedAt,
-                        CreatedBy = e.CreatedBy
+                        id = e.ExamId,
+                        type = "exam_created",
+                        title = e.ExamName,
+                        description = $"Đề thi {e.ExamName} đã được tạo",
+                        createdAt = e.CreatedAt,
+                        createdBy = e.CreatedBy
                     })
                     .ToListAsync();
 
-                var dashboardData = new DashboardDataDto
+                var dashboardData = new
                 {
-                    TotalExams = totalExams,
-                    TotalUsers = totalUsers,
-                    TotalQuestions = totalQuestions,
-                    TotalChapters = totalChapters,
-                    RecentActivities = recentExams
+                    totalExams = totalExams,
+                    totalUsers = totalUsers,
+                    totalQuestions = totalQuestions,
+                    totalChapters = totalChapters,
+                    recentActivities = recentExams
                 };
 
-                return Ok(new ApiResponse<DashboardDataDto>
-                {
-                    Success = true,
-                    Message = "Dashboard data retrieved successfully",
-                    Data = dashboardData
-                });
+                return Ok(dashboardData);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting dashboard data");
-                return StatusCode(500, new ApiResponse<DashboardDataDto>
-                {
-                    Success = false,
-                    Message = $"Server error: {ex.Message}"
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message 
                 });
             }
         }
 
+        // GET: analytics/activities
         [HttpGet("recent-activities")]
-        public async Task<ActionResult<ApiResponse<List<RecentActivityDto>>>> GetRecentActivities([FromQuery] int limit = 10)
+        public async Task<IActionResult> GetRecentActivities([FromQuery] int limit = 10)
         {
             try
             {
-                var activities = new List<RecentActivityDto>();
+                var activities = new List<object>();
 
                 // Get recent exams
                 var recentExams = await _context.Exams
                     .OrderByDescending(e => e.CreatedAt)
                     .Take(limit / 2)
-                    .Select(e => new RecentActivityDto
+                    .Select(e => new
                     {
-                        Id = e.ExamId,
-                        Type = "exam_created",
-                        Title = e.ExamName,
-                        Description = $"Đã tạo đề thi {e.ExamName}",
-                        CreatedAt = e.CreatedAt,
-                        CreatedBy = e.CreatedBy,
-                        Icon = "rocket"
+                        id = e.ExamId,
+                        type = "exam_created",
+                        title = e.ExamName,
+                        description = $"Đã tạo đề thi {e.ExamName}",
+                        createdAt = e.CreatedAt,
+                        createdBy = e.CreatedBy,
+                        icon = "rocket"
                     })
                     .ToListAsync();
 
@@ -103,43 +99,38 @@ namespace BE_Phygens.Controllers
                 var recentQuestions = await _context.Questions
                     .OrderByDescending(q => q.CreatedAt)
                     .Take(limit / 2)
-                    .Select(q => new RecentActivityDto
+                    .Select(q => new
                     {
-                        Id = q.QuestionId,
-                        Type = "question_created",
-                        Title = "Câu hỏi mới",
-                        Description = $"Đã tạo câu hỏi: {q.QuestionText.Substring(0, Math.Min(50, q.QuestionText.Length))}...",
-                        CreatedAt = q.CreatedAt,
-                        CreatedBy = q.CreatedBy,
-                        Icon = "question"
+                        id = q.QuestionId,
+                        type = "question_created",
+                        title = "Câu hỏi mới",
+                        description = $"Đã tạo câu hỏi: {q.QuestionText.Substring(0, Math.Min(50, q.QuestionText.Length))}...",
+                        createdAt = q.CreatedAt,
+                        createdBy = q.CreatedBy,
+                        icon = "question"
                     })
                     .ToListAsync();
 
                 activities.AddRange(recentQuestions);
 
                 // Sort by creation time and take limit
-                activities = activities.OrderByDescending(a => a.CreatedAt).Take(limit).ToList();
+                var sortedActivities = activities.OrderByDescending(a => ((dynamic)a).createdAt).Take(limit).ToList();
 
-                return Ok(new ApiResponse<List<RecentActivityDto>>
-                {
-                    Success = true,
-                    Message = $"Retrieved {activities.Count} recent activities",
-                    Data = activities
-                });
+                return Ok(sortedActivities);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting recent activities");
-                return StatusCode(500, new ApiResponse<List<RecentActivityDto>>
-                {
-                    Success = false,
-                    Message = $"Server error: {ex.Message}"
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message 
                 });
             }
         }
 
+        // GET: analytics/exams
         [HttpGet("filtered-exams")]
-        public async Task<ActionResult<ApiResponse<List<ExamListDto>>>> GetFilteredExams(
+        public async Task<IActionResult> GetFilteredExams(
             [FromQuery] int? grade = null,
             [FromQuery] string? topic = null,
             [FromQuery] string? difficulty = null,
@@ -180,33 +171,27 @@ namespace BE_Phygens.Controllers
                 var exams = await query
                     .OrderByDescending(e => e.CreatedAt)
                     .Take(limit)
-                    .Select(e => new ExamListDto
+                    .Select(e => new
                     {
-                        ExamId = e.ExamId,
-                        ExamName = e.ExamName,
-                        Description = e.Description,
-                        ExamType = e.ExamType,
-                        Duration = e.DurationMinutes ?? 45,
-                        CreatedAt = e.CreatedAt,
-                        CreatedBy = e.CreatedBy,
-                        IsPublished = e.IsPublished
+                        examId = e.ExamId,
+                        examName = e.ExamName,
+                        description = e.Description,
+                        examType = e.ExamType,
+                        duration = e.DurationMinutes ?? 45,
+                        createdAt = e.CreatedAt,
+                        createdBy = e.CreatedBy,
+                        isPublished = e.IsPublished
                     })
                     .ToListAsync();
 
-                return Ok(new ApiResponse<List<ExamListDto>>
-                {
-                    Success = true,
-                    Message = $"Retrieved {exams.Count} filtered exams",
-                    Data = exams
-                });
+                return Ok(exams);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting filtered exams");
-                return StatusCode(500, new ApiResponse<List<ExamListDto>>
-                {
-                    Success = false,
-                    Message = $"Server error: {ex.Message}"
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message 
                 });
             }
         }

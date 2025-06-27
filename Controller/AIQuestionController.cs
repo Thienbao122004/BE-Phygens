@@ -27,9 +27,10 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Generate AI question using real AI service (OpenAI/Gemini)
+        /// POST: ai-questions/generate
         /// </summary>
         [HttpPost("generate")]
-        public async Task<ActionResult<ApiResponse<QuestionDto>>> GenerateQuestion([FromBody] GenerateQuestionRequest request)
+        public async Task<IActionResult> GenerateQuestion([FromBody] GenerateQuestionRequest request)
         {
             try
             {
@@ -50,18 +51,16 @@ namespace BE_Phygens.Controllers
                     
                     if (!availableChapters.Any())
                     {
-                        return BadRequest(new ApiResponse<QuestionDto>
-                        {
-                            Success = false,
-                            Message = "Không có chapter nào trong database. Vui lòng seed sample data hoặc tạo chapters trước."
+                        return BadRequest(new { 
+                            error = "No chapters available", 
+                            message = "Không có chapter nào trong database. Vui lòng seed sample data hoặc tạo chapters trước." 
                         });
                     }
                     
                     var chapterList = string.Join(", ", availableChapters.Select(c => $"ID={c.ChapterId} ({c.ChapterName})"));
-                    return BadRequest(new ApiResponse<QuestionDto>
-                    {
-                        Success = false,
-                        Message = $"ChapterId phải > 0. Các chapters có sẵn: {chapterList}"
+                    return BadRequest(new { 
+                        error = "Invalid chapter ID", 
+                        message = $"ChapterId phải > 0. Các chapters có sẵn: {chapterList}" 
                     });
                 }
                 
@@ -103,20 +102,29 @@ namespace BE_Phygens.Controllers
                     await SaveQuestionToDatabase(questionDto);
                 }
 
-                return Ok(new ApiResponse<QuestionDto>
-                {
-                    Success = true,
-                    Message = "Tạo câu hỏi AI thành công",
-                    Data = questionDto
+                return Ok(new {
+                    questionId = questionDto.QuestionId,
+                    questionText = questionDto.QuestionText,
+                    questionType = questionDto.QuestionType,
+                    difficulty = questionDto.Difficulty,
+                    topic = questionDto.Topic,
+                    chapterId = questionDto.ChapterId,
+                    answerChoices = questionDto.AnswerChoices?.Select(ac => new {
+                        choiceLabel = ac.ChoiceLabel,
+                        choiceText = ac.ChoiceText,
+                        isCorrect = ac.IsCorrect
+                    }).ToList(),
+                    explanation = questionDto.Explanation,
+                    createdBy = questionDto.CreatedBy,
+                    createdAt = questionDto.CreatedAt
                 });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating AI question");
-                return StatusCode(500, new ApiResponse<QuestionDto>
-                {
-                    Success = false,
-                    Message = $"Lỗi server: {ex.Message}"
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message 
                 });
             }
         }
@@ -345,10 +353,11 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Get all questions with pagination and filters
+        /// GET: ai-questions
         /// </summary>
-        [HttpGet("list")]
+        [HttpGet]
         [AllowAnonymous]
-        public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GetQuestions(
+        public async Task<IActionResult> GetQuestions(
             [FromQuery] int page = 1, 
             [FromQuery] int pageSize = 10, 
             [FromQuery] string search = "",
@@ -390,41 +399,47 @@ namespace BE_Phygens.Controllers
                     .ToListAsync();
 
                 // Convert to DTOs
-                var questionDtos = questions.Select(q => new QuestionDto
+                var questionDtos = questions.Select(q => new
                 {
-                    QuestionId = q.QuestionId,
-                    QuestionText = q.QuestionText,
-                    Difficulty = q.DifficultyLevel,
-                    DifficultyLevel = q.DifficultyLevel, 
-                    Explanation = q.Explanation, 
-                    Topic = q.SpecificTopic ?? "Chưa phân loại",
-                    QuestionType = q.QuestionType,
-                    CreatedAt = q.CreatedAt,
-                    CreatedBy = q.CreatedBy ?? "system",
-                    AnswerChoices = q.AnswerChoices?.Select(ac => new AnswerChoiceDto
+                    questionId = q.QuestionId,
+                    questionText = q.QuestionText,
+                    difficulty = q.DifficultyLevel,
+                    explanation = q.Explanation,
+                    topic = q.SpecificTopic ?? "Chưa phân loại",
+                    questionType = q.QuestionType,
+                    createdAt = q.CreatedAt,
+                    createdBy = q.CreatedBy ?? "system",
+                    chapterId = q.ChapterId,
+                    answerChoices = q.AnswerChoices?.Select(ac => new
                     {
-                        ChoiceId = ac.ChoiceId,
-                        ChoiceText = ac.ChoiceText,
-                        IsCorrect = ac.IsCorrect,
-                        ChoiceLabel = ac.ChoiceLabel ?? "A",
-                        DisplayOrder = ac.DisplayOrder ?? 0
-                    }).ToList() ?? new List<AnswerChoiceDto>()
+                        choiceId = ac.ChoiceId,
+                        choiceText = ac.ChoiceText,
+                        isCorrect = ac.IsCorrect,
+                        choiceLabel = ac.ChoiceLabel ?? "A",
+                        displayOrder = ac.DisplayOrder ?? 0
+                    }).ToList()
                 }).ToList();
 
-                return Ok(new ApiResponse<List<QuestionDto>>
+                var response = new
                 {
-                    Success = true,
-                    Message = "Lấy danh sách câu hỏi thành công",
-                    Data = questionDtos
-                });
+                    questions = questionDtos,
+                    pagination = new
+                    {
+                        currentPage = page,
+                        pageSize = pageSize,
+                        totalCount = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                };
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting questions");
-                return StatusCode(500, new ApiResponse<List<QuestionDto>>
-                {
-                    Success = false,
-                    Message = $"Lỗi server: {ex.Message}"
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    message = ex.Message 
                 });
             }
         }
