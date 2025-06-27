@@ -1,0 +1,809 @@
+using BE_Phygens.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace BE_Phygens.Services
+{
+    public class AutoGradingService : IAutoGradingService
+    {
+        private readonly PhygensContext _context;
+        private readonly ILogger<AutoGradingService> _logger;
+
+        public AutoGradingService(PhygensContext context, ILogger<AutoGradingService> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        public async Task<QuestionGradingResult> GradeSingleQuestionAsync(string questionId, string studentChoiceId, string? studentUserId)
+        {
+            // Lấy thông tin câu hỏi và đáp án đúng
+            var question = await _context.Questions
+                .Include(q => q.AnswerChoices)
+                .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+            if (question == null)
+            {
+                throw new ArgumentException("Không tìm thấy câu hỏi");
+            }
+
+            // Lấy lựa chọn của học sinh
+            var studentChoice = await _context.AnswerChoices
+                .FirstOrDefaultAsync(c => c.ChoiceId == studentChoiceId && c.QuestionId == questionId);
+
+            if (studentChoice == null)
+            {
+                throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
+            }
+
+            // Lấy đáp án đúng
+            var correctChoice = question.AnswerChoices.FirstOrDefault(c => c.IsCorrect);
+            if (correctChoice == null)
+            {
+                throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
+            }
+
+            // Kiểm tra đáp án
+            bool isCorrect = studentChoice.IsCorrect;
+            decimal pointsEarned = isCorrect ? 1.0m : 0.0m; // Mặc định 1 điểm cho câu đúng
+
+            // Lấy giải thích cho câu hỏi
+            var explanation = await _context.Explanations
+                .FirstOrDefaultAsync(e => e.QuestionId == questionId);
+
+            // Tạo kết quả
+            var result = new QuestionGradingResult
+            {
+                QuestionId = questionId,
+                CorrectChoiceId = correctChoice.ChoiceId,
+                CorrectChoiceLabel = correctChoice.ChoiceLabel,
+                CorrectChoiceText = correctChoice.ChoiceText,
+                StudentChoiceId = studentChoice.ChoiceId,
+                StudentChoiceLabel = studentChoice.ChoiceLabel,
+                StudentChoiceText = studentChoice.ChoiceText,
+                IsCorrect = isCorrect,
+                PointsEarned = (double)pointsEarned,
+                MaxPoints = 1.0, // Mặc định 1 điểm tối đa
+                Feedback = isCorrect ? "Chính xác!" : "Chưa chính xác",
+                Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
+                DifficultyLevel = question.DifficultyLevel,
+                QuestionType = question.QuestionType,
+                GradedAt = DateTime.UtcNow
+            };
+
+            // Lưu kết quả vào lịch sử nếu có studentUserId
+            if (!string.IsNullOrEmpty(studentUserId))
+            {
+                // Tìm exam question để lấy examId
+                var examQuestion = await _context.ExamQuestions
+                    .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
+
+                if (examQuestion == null)
+                {
+                    throw new ArgumentException("Không tìm thấy câu hỏi trong bài thi");
+                }
+
+                // Tạo một attempt mới cho lần trả lời này
+                var attempt = new StudentAttempt
+                {
+                    AttemptId = Guid.NewGuid().ToString(),
+                    UserId = studentUserId,
+                    ExamId = examQuestion.ExamId,
+                    StartTime = DateTime.UtcNow,
+                    EndTime = DateTime.UtcNow,
+                    TotalScore = pointsEarned,
+                    MaxScore = 1.0m,
+                    Status = "completed"
+                };
+                _context.StudentAttempts.Add(attempt);
+
+                var studentAnswer = new StudentAnswer
+                {
+                    AnswerId = Guid.NewGuid().ToString(),
+                    AttemptId = attempt.AttemptId,
+                    QuestionId = questionId,
+                    SelectedChoiceId = studentChoiceId,
+                    IsCorrect = isCorrect,
+                    PointsEarned = pointsEarned,
+                    AnsweredAt = DateTime.UtcNow
+                };
+
+                _context.StudentAnswers.Add(studentAnswer);
+                await _context.SaveChangesAsync();
+            }
+
+            return result;
+        }
+
+        public async Task<DetailedFeedback> GetDetailedFeedbackAsync(string questionId, string studentChoiceId)
+        {
+            // Lấy thông tin câu hỏi và các lựa chọn
+            var question = await _context.Questions
+                .Include(q => q.AnswerChoices)
+                .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+            if (question == null)
+            {
+                throw new ArgumentException("Không tìm thấy câu hỏi");
+            }
+
+            // Lấy lựa chọn của học sinh
+            var studentChoice = await _context.AnswerChoices
+                .FirstOrDefaultAsync(c => c.ChoiceId == studentChoiceId && c.QuestionId == questionId);
+
+            if (studentChoice == null)
+            {
+                throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
+            }
+
+            // Lấy đáp án đúng
+            var correctChoice = question.AnswerChoices.FirstOrDefault(c => c.IsCorrect);
+            if (correctChoice == null)
+            {
+                throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
+            }
+
+            // Lấy giải thích chi tiết
+            var explanation = await _context.Explanations
+                .FirstOrDefaultAsync(e => e.QuestionId == questionId);
+
+            // Lấy thông tin về chủ đề liên quan
+            var topic = await _context.PhysicsTopics
+                .FirstOrDefaultAsync(t => t.Questions.Any(q => q.QuestionId == questionId));
+
+            // Tạo phản hồi chi tiết
+            var feedback = new DetailedFeedback
+            {
+                QuestionId = questionId,
+                QuestionText = question.QuestionText,
+                CorrectAnswer = $"{correctChoice.ChoiceLabel}. {correctChoice.ChoiceText}",
+                StudentAnswer = $"{studentChoice.ChoiceLabel}. {studentChoice.ChoiceText}",
+                IsCorrect = studentChoice.IsCorrect,
+                Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
+                CommonMistakeWarning = studentChoice.IsCorrect ? string.Empty : GetCommonMistakeWarning(question, studentChoice),
+                StudyTip = GetStudyTip(question, studentChoice.IsCorrect),
+                RelatedTopics = topic?.TopicName ?? "Chưa phân loại"
+            };
+
+            return feedback;
+        }
+
+        private string GetCommonMistakeWarning(Question question, AnswerChoice studentChoice)
+        {
+            // Phân tích lỗi phổ biến dựa trên lựa chọn của học sinh
+            if (!studentChoice.IsCorrect)
+            {
+                return "Đây là một lỗi phổ biến. Hãy chú ý đọc kỹ đề bài và xem lại phần lý thuyết liên quan.";
+            }
+            return string.Empty;
+        }
+
+        private string GetStudyTip(Question question, bool isCorrect)
+        {
+            if (!isCorrect)
+            {
+                return "Gợi ý: Hãy ôn lại các công thức và định luật liên quan. Thử giải lại bài tập với cách tiếp cận khác.";
+            }
+            return "Tốt lắm! Hãy tiếp tục luyện tập các dạng bài tập tương tự để nâng cao kỹ năng.";
+        }
+
+        public async Task<ExamGradingResult> GradeExamAsync(string examId, List<StudentAnswerSubmission> studentAnswers, string studentUserId)
+        {
+            // Lấy thông tin bài thi
+            var exam = await _context.Exams
+                .Include(e => e.ExamQuestions)
+                .ThenInclude(eq => eq.Question)
+                .ThenInclude(q => q.AnswerChoices)
+                .FirstOrDefaultAsync(e => e.ExamId == examId);
+
+            if (exam == null)
+            {
+                throw new ArgumentException("Không tìm thấy bài thi");
+            }
+
+            // Tạo attempt mới
+            var attempt = new StudentAttempt
+            {
+                AttemptId = Guid.NewGuid().ToString(),
+                ExamId = examId,
+                UserId = studentUserId,
+                StartTime = DateTime.UtcNow,
+                EndTime = DateTime.UtcNow,
+                Status = "completed"
+            };
+            _context.StudentAttempts.Add(attempt);
+
+            // Chấm từng câu hỏi
+            var questionResults = new List<QuestionGradingResult>();
+            decimal totalPoints = 0;
+            int correctAnswers = 0;
+            var topicAccuracy = new Dictionary<string, (int correct, int total)>();
+            var difficultyBreakdown = new Dictionary<string, int>();
+
+            foreach (var answer in studentAnswers)
+            {
+                var result = await GradeSingleQuestionAsync(answer.QuestionId, answer.SelectedChoiceId, studentUserId);
+                questionResults.Add(result);
+
+                if (result.IsCorrect)
+                {
+                    correctAnswers++;
+                    totalPoints += (decimal)result.PointsEarned;
+                }
+
+                // Cập nhật thống kê theo chủ đề
+                var examQuestion = exam.ExamQuestions.FirstOrDefault(eq => eq.QuestionId == answer.QuestionId);
+                if (examQuestion?.Question != null)
+                {
+                    var topic = await _context.PhysicsTopics
+                        .FirstOrDefaultAsync(t => t.Questions.Any(q => q.QuestionId == examQuestion.QuestionId));
+                    
+                    if (topic != null)
+                    {
+                        if (!topicAccuracy.ContainsKey(topic.TopicName))
+                        {
+                            topicAccuracy[topic.TopicName] = (0, 0);
+                        }
+                        var (correct, total) = topicAccuracy[topic.TopicName];
+                        topicAccuracy[topic.TopicName] = (correct + (result.IsCorrect ? 1 : 0), total + 1);
+                    }
+
+                    // Cập nhật thống kê theo độ khó
+                    var difficulty = result.DifficultyLevel;
+                    if (!difficultyBreakdown.ContainsKey(difficulty))
+                    {
+                        difficultyBreakdown[difficulty] = 0;
+                    }
+                    difficultyBreakdown[difficulty]++;
+                }
+            }
+
+            // Cập nhật thông tin attempt
+            attempt.TotalScore = totalPoints;
+            attempt.MaxScore = exam.ExamQuestions.Count;
+            await _context.SaveChangesAsync();
+
+            // Tạo kết quả chi tiết
+            var percentageScore = (double)(totalPoints / exam.ExamQuestions.Count * 100);
+            var examResult = new ExamGradingResult
+            {
+                ExamId = examId,
+                StudentId = studentUserId,
+                ExamName = exam.ExamName,
+                ExamType = exam.ExamType,
+                TotalQuestions = exam.ExamQuestions.Count,
+                CorrectAnswers = correctAnswers,
+                IncorrectAnswers = exam.ExamQuestions.Count - correctAnswers,
+                TotalPointsEarned = (double)totalPoints,
+                MaxPossiblePoints = exam.ExamQuestions.Count,
+                PercentageScore = percentageScore,
+                Grade = GetGrade(percentageScore),
+                CompletedAt = DateTime.UtcNow,
+                DifficultyBreakdown = difficultyBreakdown,
+                TopicAccuracy = topicAccuracy.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value.correct * 100.0 / kvp.Value.total
+                ),
+                QuestionResults = questionResults.Cast<Models.QuestionGradingResult>(),
+                Analysis = GenerateExamAnalysis(percentageScore, topicAccuracy, difficultyBreakdown)
+            };
+
+            return examResult;
+        }
+
+        public async Task<ExamGradingResult> GradeExamAttemptAsync(string attemptId)
+        {
+            var attempt = await _context.StudentAttempts
+                .Include(a => a.Exam)
+                .Include(a => a.StudentAnswers)
+                .FirstOrDefaultAsync(a => a.AttemptId == attemptId);
+
+            if (attempt == null)
+            {
+                throw new ArgumentException("Không tìm thấy lần thi");
+            }
+
+            var studentAnswers = attempt.StudentAnswers.Select(a => new StudentAnswerSubmission
+            {
+                QuestionId = a.QuestionId,
+                SelectedChoiceId = a.SelectedChoiceId ?? string.Empty,
+                SubmittedAt = a.AnsweredAt
+            }).ToList();
+
+            return await GradeExamAsync(attempt.ExamId, studentAnswers, attempt.UserId);
+        }
+
+        public async Task<List<QuestionGradingResult>> BatchGradeQuestionsAsync(List<StudentAnswerSubmission> submissions, string? studentUserId)
+        {
+            var results = new List<QuestionGradingResult>();
+            foreach (var submission in submissions)
+            {
+                var result = await GradeSingleQuestionAsync(
+                    submission.QuestionId,
+                    submission.SelectedChoiceId,
+                    studentUserId
+                );
+                results.Add(result);
+            }
+            return results;
+        }
+
+        private string GetGrade(double percentageScore)
+        {
+            if (percentageScore >= 90) return "A";
+            if (percentageScore >= 80) return "B";
+            if (percentageScore >= 70) return "C";
+            if (percentageScore >= 60) return "D";
+            return "F";
+        }
+
+        private ExamAnalysis GenerateExamAnalysis(
+            double percentageScore,
+            Dictionary<string, (int correct, int total)> topicAccuracy,
+            Dictionary<string, int> difficultyBreakdown)
+        {
+            var analysis = new ExamAnalysis();
+
+            // Xác định mức độ thành tích
+            if (percentageScore >= 90)
+                analysis.PerformanceLevel = "Xuất sắc";
+            else if (percentageScore >= 80)
+                analysis.PerformanceLevel = "Giỏi";
+            else if (percentageScore >= 70)
+                analysis.PerformanceLevel = "Khá";
+            else if (percentageScore >= 60)
+                analysis.PerformanceLevel = "Trung bình";
+            else
+                analysis.PerformanceLevel = "Cần cải thiện";
+
+            // Tạo các khuyến nghị
+            analysis.Recommendations = new List<string>();
+            analysis.StudyPlan = new List<string>();
+
+            // Phân tích điểm yếu theo chủ đề
+            var weakTopics = topicAccuracy
+                .Where(t => t.Value.correct * 100.0 / t.Value.total < 70)
+                .Select(t => t.Key)
+                .ToList();
+
+            if (weakTopics.Any())
+            {
+                analysis.Recommendations.Add($"Cần tập trung ôn tập các chủ đề: {string.Join(", ", weakTopics)}");
+                analysis.StudyPlan.Add("Xem lại lý thuyết và làm thêm bài tập về các chủ đề trên");
+            }
+
+            // Phân tích theo độ khó
+            if (difficultyBreakdown.ContainsKey("hard") && difficultyBreakdown["hard"] > 0)
+            {
+                analysis.Recommendations.Add("Cần luyện tập thêm các bài tập khó");
+                analysis.StudyPlan.Add("Tăng dần độ khó của bài tập khi luyện tập");
+            }
+
+            // Tạo phân tích chi tiết theo chủ đề
+            analysis.TopicBreakdown = topicAccuracy.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.correct * 100.0 / kvp.Value.total
+            );
+
+            return analysis;
+        }
+
+        public async Task<List<QuestionAnalytics>> GetQuestionAnalyticsAsync(string questionId)
+        {
+            var questions = new List<Question>();
+            
+            if (string.IsNullOrEmpty(questionId))
+            {
+                // Nếu không có questionId, lấy phân tích cho tất cả câu hỏi
+                questions = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .Include(q => q.Topic)
+                    .ToListAsync();
+            }
+            else
+            {
+                // Nếu có questionId, chỉ lấy phân tích cho câu hỏi đó
+                var question = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .Include(q => q.Topic)
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+                if (question == null)
+                {
+                    throw new ArgumentException("Không tìm thấy câu hỏi");
+                }
+
+                questions.Add(question);
+            }
+
+            var result = new List<QuestionAnalytics>();
+
+            foreach (var question in questions)
+            {
+                // Lấy tất cả các lần trả lời cho câu hỏi này
+                var answers = await _context.StudentAnswers
+                    .Where(a => a.QuestionId == question.QuestionId)
+                    .ToListAsync();
+
+                var totalAttempts = answers.Count;
+                var correctAttempts = answers.Count(a => a.IsCorrect);
+
+                // Phân tích lựa chọn phổ biến
+                var choiceDistribution = answers
+                    .GroupBy(a => a.SelectedChoiceId)
+                    .ToDictionary(
+                        g => g.Key ?? "no_answer",
+                        g => g.Count()
+                    );
+
+                // Tìm các lựa chọn sai phổ biến
+                var commonWrongChoices = answers
+                    .Where(a => !a.IsCorrect && a.SelectedChoiceId != null)
+                    .GroupBy(a => a.SelectedChoiceId)
+                    .OrderByDescending(g => g.Count())
+                    .Take(3)
+                    .Select(g => g.Key ?? "no_answer")
+                    .ToList();
+
+                // Tính thời gian trung bình
+                var averageTimeSpent = TimeSpan.FromMinutes(2); // Mặc định 2 phút
+
+                // Xác định mức độ hiệu suất
+                string performanceLevel;
+                var successRate = totalAttempts > 0 ? (double)correctAttempts / totalAttempts * 100 : 0;
+                if (successRate >= 80) performanceLevel = "Xuất sắc";
+                else if (successRate >= 60) performanceLevel = "Khá";
+                else if (successRate >= 40) performanceLevel = "Trung bình";
+                else performanceLevel = "Cần cải thiện";
+
+                // Đề xuất cải thiện
+                var suggestions = new List<string>();
+                if (successRate < 60)
+                {
+                    suggestions.Add("Ôn tập lại lý thuyết cơ bản của chủ đề này");
+                    suggestions.Add("Làm thêm các bài tập tương tự để rèn luyện kỹ năng");
+                    suggestions.Add("Tham khảo giải thích chi tiết cho các lần làm sai");
+                }
+
+                result.Add(new QuestionAnalytics
+                {
+                    QuestionId = question.QuestionId,
+                    QuestionText = question.QuestionText,
+                    DifficultyLevel = question.DifficultyLevel ?? "medium",
+                    TopicName = question.Topic?.TopicName ?? "Chưa phân loại",
+                    TotalAttempts = totalAttempts,
+                    CorrectAttempts = correctAttempts,
+                    SuccessRate = successRate,
+                    ChoiceDistribution = choiceDistribution,
+                    CommonWrongChoices = commonWrongChoices,
+                    AverageTimeSpent = averageTimeSpent,
+                    PerformanceLevel = performanceLevel,
+                    ImprovementSuggestions = suggestions
+                });
+            }
+
+            return result;
+        }
+
+        public async Task<StudentPerformance> GetStudentPerformanceAsync(string studentId, string? examId)
+        {
+            // Lấy thông tin học sinh
+            var student = await _context.Users
+                .FirstOrDefaultAsync(u => u.UserId == studentId);
+
+            if (student == null)
+            {
+                throw new ArgumentException("Không tìm thấy học sinh");
+            }
+
+            // Lấy tất cả các lần làm bài của học sinh
+            var query = _context.StudentAnswers
+                .Include(a => a.Attempt)
+                .Include(a => a.Question)
+                .ThenInclude(q => q.Topic)
+                .Where(a => a.Attempt.UserId == studentId);
+
+            // Nếu có examId, chỉ lấy kết quả của bài thi cụ thể
+            if (!string.IsNullOrEmpty(examId))
+            {
+                query = query.Where(a => a.Attempt.ExamId == examId);
+            }
+
+            var answers = await query.ToListAsync();
+
+            // Tính toán các chỉ số cơ bản
+            var totalQuestions = answers.Count;
+            var correctAnswers = answers.Count(a => a.IsCorrect);
+            var overallAccuracy = totalQuestions > 0 ? (double)correctAnswers / totalQuestions * 100 : 0;
+
+            // Phân tích theo độ khó
+            var accuracyByDifficulty = answers
+                .GroupBy(a => a.Question.DifficultyLevel ?? "medium")
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Count() > 0 ? (double)g.Count(a => a.IsCorrect) / g.Count() * 100 : 0
+                );
+
+            // Phân tích theo chủ đề
+            var accuracyByTopic = answers
+                .GroupBy(a => a.Question.Topic.TopicName)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Count() > 0 ? (double)g.Count(a => a.IsCorrect) / g.Count() * 100 : 0
+                );
+
+            // Phân tích theo loại câu hỏi
+            var accuracyByQuestionType = answers
+                .GroupBy(a => a.Question.QuestionType ?? "multiple_choice")
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Count() > 0 ? (double)g.Count(a => a.IsCorrect) / g.Count() * 100 : 0
+                );
+
+            // Xác định điểm yếu
+            var weakAreas = accuracyByTopic
+                .Where(t => t.Value < 60)
+                .Select(t => new WeakArea
+                {
+                    TopicName = t.Key,
+                    AccuracyRate = t.Value,
+                    QuestionsAttempted = answers.Count(a => a.Question.Topic.TopicName == t.Key),
+                    CommonMistakes = new List<string> { "Cần ôn tập lại lý thuyết cơ bản" },
+                    Recommendations = new List<string> { "Làm thêm bài tập cơ bản", "Xem lại video bài giảng" },
+                    Priority = t.Value < 40 ? 1 : 2
+                })
+                .ToList();
+
+            // Xác định điểm mạnh
+            var strengths = accuracyByTopic
+                .Where(t => t.Value >= 80)
+                .Select(t => new Strength
+                {
+                    TopicName = t.Key,
+                    AccuracyRate = t.Value,
+                    QuestionsAttempted = answers.Count(a => a.Question.Topic.TopicName == t.Key),
+                    ConsistencyLevel = t.Value >= 90 ? "Rất tốt" : "Tốt"
+                })
+                .ToList();
+
+            // Lấy các bài thi gần đây
+            var recentExams = await _context.StudentAttempts
+                .Include(a => a.Exam)
+                .Where(a => a.UserId == studentId)
+                .OrderByDescending(a => a.EndTime)
+                .Take(5)
+                .Select(a => new RecentExam
+                {
+                    ExamId = a.ExamId,
+                    ExamName = a.Exam.ExamName,
+                    ExamType = a.Exam.ExamType,
+                    Score = (double)a.TotalScore,
+                    MaxScore = (double)(a.MaxScore ?? 100m),
+                    Percentage = a.MaxScore > 0 ? (double)a.TotalScore / (double)a.MaxScore * 100 : 0,
+                    CompletedAt = a.EndTime ?? DateTime.UtcNow,
+                    TimeTaken = a.EndTime.HasValue ? a.EndTime.Value - a.StartTime : TimeSpan.Zero
+                })
+                .ToListAsync();
+
+            // Phân tích xu hướng học tập
+            var learningTrend = new LearningTrend
+            {
+                Trend = overallAccuracy >= 70 ? "Tích cực" : "Cần cải thiện",
+                ProgressRate = 0, // Cần thêm dữ liệu theo thời gian để tính
+                DataPoints = await _context.StudentAttempts
+                    .Include(a => a.StudentAnswers)
+                    .Where(a => a.UserId == studentId)
+                    .OrderBy(a => a.EndTime)
+                    .Select(a => new LearningDataPoint
+                    {
+                        Date = a.EndTime ?? DateTime.UtcNow,
+                        AccuracyRate = a.MaxScore > 0 ? (double)a.TotalScore / (double)a.MaxScore * 100 : 0,
+                        QuestionsAnswered = a.StudentAnswers.Count
+                    })
+                    .ToListAsync()
+            };
+
+            return new StudentPerformance
+            {
+                StudentId = studentId,
+                StudentName = student.FullName,
+                Email = student.Email,
+                TotalQuestionsAttempted = totalQuestions,
+                TotalCorrectAnswers = correctAnswers,
+                OverallAccuracy = overallAccuracy,
+                AccuracyByDifficulty = accuracyByDifficulty,
+                AccuracyByTopic = accuracyByTopic,
+                AccuracyByQuestionType = accuracyByQuestionType,
+                WeakAreas = weakAreas,
+                Strengths = strengths,
+                RecentExams = recentExams,
+                LearningTrend = learningTrend,
+                LastActivity = answers.Any() 
+                    ? answers.Max(a => a.Attempt.EndTime ?? DateTime.UtcNow)
+                    : DateTime.UtcNow
+            };
+        }
+
+        public async Task<List<CommonMistake>> GetCommonMistakesAsync(string questionId)
+        {
+            var question = await _context.Questions
+                .Include(q => q.AnswerChoices)
+                .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+            if (question == null)
+            {
+                throw new ArgumentException("Không tìm thấy câu hỏi");
+            }
+
+            // Lấy tất cả các lần trả lời sai cho câu hỏi này
+            var incorrectAnswers = await _context.StudentAnswers
+                .Where(a => a.QuestionId == questionId && !a.IsCorrect)
+                .GroupBy(a => a.SelectedChoiceId)
+                .Select(g => new
+                {
+                    ChoiceId = g.Key,
+                    Count = g.Count()
+                })
+                .ToListAsync();
+
+            var totalAttempts = await _context.StudentAnswers
+                .Where(a => a.QuestionId == questionId)
+                .CountAsync();
+
+            var commonMistakes = new List<CommonMistake>();
+
+            foreach (var answer in incorrectAnswers)
+            {
+                var choice = question.AnswerChoices.FirstOrDefault(c => c.ChoiceId == answer.ChoiceId);
+                if (choice != null)
+                {
+                    commonMistakes.Add(new CommonMistake
+                    {
+                        QuestionId = questionId,
+                        WrongChoiceId = choice.ChoiceId,
+                        WrongChoiceText = choice.ChoiceText,
+                        TimesSelected = answer.Count,
+                        SelectionRate = totalAttempts > 0 ? (double)answer.Count / totalAttempts * 100 : 0,
+                        ReasonForMistake = "Học sinh có thể đã nhầm lẫn giữa các công thức hoặc hiểu sai yêu cầu của bài toán",
+                        Correction = "Cần đọc kỹ đề bài và xem lại lý thuyết liên quan",
+                        StudyTips = new List<string>
+                        {
+                            "Ôn tập lại lý thuyết cơ bản",
+                            "Làm thêm bài tập tương tự",
+                            "Xem lại video bài giảng"
+                        }
+                    });
+                }
+            }
+
+            return commonMistakes.OrderByDescending(m => m.TimesSelected).ToList();
+        }
+
+        public async Task<ExamStatistics> GetExamStatisticsAsync(string examId)
+        {
+            var exam = await _context.Exams
+                .Include(e => e.ExamQuestions)
+                .ThenInclude(eq => eq.Question)
+                .FirstOrDefaultAsync(e => e.ExamId == examId);
+
+            if (exam == null)
+            {
+                throw new ArgumentException("Không tìm thấy bài thi");
+            }
+
+            var attempts = await _context.StudentAttempts
+                .Where(a => a.ExamId == examId)
+                .Include(a => a.StudentAnswers)
+                .ToListAsync();
+
+            if (!attempts.Any())
+            {
+                return new ExamStatistics
+                {
+                    ExamId = examId,
+                    ExamName = exam.ExamName,
+                    TotalAttempts = 0,
+                    AverageScore = 0,
+                    HighestScore = 0,
+                    LowestScore = 0,
+                    AverageCompletionTime = TimeSpan.Zero,
+                    GradeDistribution = new Dictionary<string, int>(),
+                    DifficultyAnalysis = new Dictionary<string, double>(),
+                    QuestionPerformances = new List<QuestionPerformance>()
+                };
+            }
+
+            // Tính toán thống kê cơ bản
+            var scores = attempts.Select(a => (double)a.TotalScore / (double)(a.MaxScore ?? 100m) * 100).ToList();
+            var averageScore = scores.Average();
+            var highestScore = scores.Max();
+            var lowestScore = scores.Min();
+
+            // Tính thời gian hoàn thành trung bình
+            var completionTimes = attempts
+                .Where(a => a.EndTime.HasValue)
+                .Select(a => a.EndTime.Value - a.StartTime)
+                .ToList();
+            var averageCompletionTime = completionTimes.Any() 
+                ? TimeSpan.FromTicks((long)completionTimes.Average(t => t.Ticks))
+                : TimeSpan.Zero;
+
+            // Phân phối điểm số
+            var gradeDistribution = new Dictionary<string, int>
+            {
+                { "A (90-100)", scores.Count(s => s >= 90) },
+                { "B (80-89)", scores.Count(s => s >= 80 && s < 90) },
+                { "C (70-79)", scores.Count(s => s >= 70 && s < 80) },
+                { "D (60-69)", scores.Count(s => s >= 60 && s < 70) },
+                { "F (0-59)", scores.Count(s => s < 60) }
+            };
+
+            // Phân tích độ khó
+            var difficultyAnalysis = exam.ExamQuestions
+                .GroupBy(eq => eq.Question.DifficultyLevel ?? "medium")
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Count() > 0 
+                        ? (double)attempts.SelectMany(a => a.StudentAnswers)
+                            .Count(sa => sa.QuestionId == g.First().QuestionId && sa.IsCorrect) 
+                            / (g.Count() * attempts.Count) * 100 
+                        : 0
+                );
+
+            // Phân tích từng câu hỏi
+            var questionPerformances = new List<QuestionPerformance>();
+            foreach (var examQuestion in exam.ExamQuestions)
+            {
+                var answers = attempts
+                    .SelectMany(a => a.StudentAnswers)
+                    .Where(a => a.QuestionId == examQuestion.QuestionId);
+
+                var totalAnswers = answers.Count();
+                var correctAnswers = answers.Count(a => a.IsCorrect);
+                var successRate = totalAnswers > 0 ? (double)correctAnswers / totalAnswers * 100 : 0;
+
+                var performanceRating = successRate switch
+                {
+                    >= 80 => "Rất tốt",
+                    >= 60 => "Tốt",
+                    >= 40 => "Trung bình",
+                    _ => "Cần cải thiện"
+                };
+
+                questionPerformances.Add(new QuestionPerformance
+                {
+                    QuestionId = examQuestion.QuestionId,
+                    QuestionText = examQuestion.Question?.QuestionText ?? "",
+                    SuccessRate = successRate,
+                    DifficultyLevel = examQuestion.Question?.DifficultyLevel ?? "medium",
+                    PerformanceRating = performanceRating
+                });
+            }
+
+            return new ExamStatistics
+            {
+                ExamId = examId,
+                ExamName = exam.ExamName,
+                TotalAttempts = attempts.Count,
+                AverageScore = averageScore,
+                HighestScore = highestScore,
+                LowestScore = lowestScore,
+                AverageCompletionTime = averageCompletionTime,
+                GradeDistribution = gradeDistribution,
+                DifficultyAnalysis = difficultyAnalysis,
+                QuestionPerformances = questionPerformances
+            };
+        }
+
+        private string AnalyzeMistakeReason(Question question, AnswerChoice incorrectChoice)
+        {
+            // Logic phân tích lỗi dựa trên câu hỏi và lựa chọn sai
+            return "Học sinh có thể đã nhầm lẫn giữa các công thức hoặc hiểu sai yêu cầu của bài toán.";
+        }
+
+        private string GetRecommendedMaterial(Question question)
+        {
+            // Đề xuất tài liệu học tập phù hợp
+            return "Xem lại chương 3 - Động lực học chất điểm và các bài tập tương tự.";
+        }
+    }
+} 

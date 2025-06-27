@@ -588,5 +588,49 @@ namespace BE_Phygens.Controllers
                 throw new Exception($"Cannot create or find default user: {ex.Message}");
             }
         }
+
+        // GET: exams/history/{userId}
+        [HttpGet("history/{userId}")]
+        public async Task<IActionResult> GetUserExamHistory(string userId)
+        {
+            try
+            {
+                var attempts = await _context.StudentAttempts
+                    .Include(a => a.Exam)
+                    .Include(a => a.StudentAnswers)
+                    .Where(a => a.UserId == userId)
+                    .OrderByDescending(a => a.StartTime)
+                    .Select(a => new
+                    {
+                        id = a.AttemptId,
+                        score = a.TotalScore,
+                        total = a.MaxScore ?? 10,
+                        subject = a.Exam.ExamName,
+                        correct = a.StudentAnswers.Count(sa => sa.IsCorrect),
+                        totalQuestions = a.StudentAnswers.Count,
+                        time = a.EndTime.HasValue 
+                            ? $"{(a.EndTime.Value - a.StartTime).TotalMinutes:0} phút"
+                            : "Đang làm bài",
+                        date = a.StartTime.ToString("HH:mm dd/MM/yyyy"),
+                        difficulty = a.Exam.ExamType == "15p" ? "Dễ" : 
+                                   a.Exam.ExamType == "1tiet" ? "Trung bình" : "Khó",
+                        accuracy = a.StudentAnswers.Any() 
+                            ? (decimal)a.StudentAnswers.Count(sa => sa.IsCorrect) / a.StudentAnswers.Count * 100
+                            : 0
+                    })
+                    .ToListAsync();
+
+                return Ok(attempts);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    error = "Internal server error",
+                    message = ex.Message,
+                    details = ex.InnerException?.Message
+                });
+            }
+        }
     }
 }
