@@ -632,37 +632,40 @@ namespace BE_Phygens.Controllers
                     });
                 }
 
-                // Create sample chapters
-                var sampleChapters = new List<Chapter>
+                // Get chapters from database
+                var chapters = await _context.Chapters
+                    .Where(c => c.IsActive)
+                    .OrderBy(c => c.Grade)
+                    .ThenBy(c => c.DisplayOrder)
+                    .ToListAsync();
+
+                if (!chapters.Any())
                 {
-                    new Chapter { ChapterName = "Cơ học chất điểm", Grade = 10, DisplayOrder = 1, Description = "Chuyển động thẳng, chuyển động tròn", IsActive = true },
-                    new Chapter { ChapterName = "Động lực học chất điểm", Grade = 10, DisplayOrder = 2, Description = "Các định luật Newton, lực", IsActive = true },
-                    new Chapter { ChapterName = "Cân bằng và chuyển động của vật rắn", Grade = 10, DisplayOrder = 3, Description = "Momen lực, cân bằng vật rắn", IsActive = true },
-                    new Chapter { ChapterName = "Các định luật bảo toàn", Grade = 10, DisplayOrder = 4, Description = "Bảo toàn động lượng, năng lượng", IsActive = true },
-                    new Chapter { ChapterName = "Chuyển động tuần hoàn", Grade = 11, DisplayOrder = 1, Description = "Dao động điều hòa, con lắc", IsActive = true },
-                    new Chapter { ChapterName = "Sóng cơ và sóng âm", Grade = 11, DisplayOrder = 2, Description = "Truyền sóng, giao thoa sóng", IsActive = true },
-                    new Chapter { ChapterName = "Dòng điện không đổi", Grade = 11, DisplayOrder = 3, Description = "Định luật Ohm, mạch điện", IsActive = true },
-                    new Chapter { ChapterName = "Dòng điện trong các môi trường", Grade = 11, DisplayOrder = 4, Description = "Dẫn điện trong kim loại, chất điện phân", IsActive = true },
-                    new Chapter { ChapterName = "Từ trường", Grade = 12, DisplayOrder = 1, Description = "Lực từ, cảm ứng từ", IsActive = true },
-                    new Chapter { ChapterName = "Cảm ứng điện từ", Grade = 12, DisplayOrder = 2, Description = "Định luật Faraday, suất điện động", IsActive = true }
-                };
+                    _logger.LogWarning("No chapters found in database");
+                    return NotFound(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Không tìm thấy chapters trong database",
+                        Data = null
+                    });
+                }
 
-                _context.Chapters.AddRange(sampleChapters);
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation($"Successfully seeded {sampleChapters.Count} sample chapters");
+                _logger.LogInformation($"Successfully retrieved {chapters.Count} chapters from database");
 
                 return Ok(new ApiResponse<object>
                 {
                     Success = true,
-                    Message = $"Đã tạo {sampleChapters.Count} sample chapters thành công",
+                    Message = $"Đã tìm thấy {chapters.Count} chapters trong database",
                     Data = new { 
-                        CreatedChapters = sampleChapters.Count,
-                        Chapters = sampleChapters.Select(c => new { 
+                        TotalChapters = chapters.Count,
+                        Chapters = chapters.Select(c => new { 
                             c.ChapterId, 
                             c.ChapterName, 
                             c.Grade, 
-                            c.DisplayOrder 
+                            c.DisplayOrder,
+                            c.Description,
+                            c.IsActive,
+                            c.CreatedAt
                         }).ToList()
                     }
                 });
