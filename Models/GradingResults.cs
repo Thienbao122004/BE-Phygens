@@ -23,6 +23,7 @@ namespace BE_Phygens.Models
     {
         public string QuestionId { get; set; } = string.Empty;
         public string SelectedChoiceId { get; set; } = string.Empty;
+        public string? StudentTextAnswer { get; set; }
         public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
     }
 

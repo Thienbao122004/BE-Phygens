@@ -17,8 +17,8 @@ namespace BE_Phygens.Services
         private readonly PhygensContext _context;
 
         public AIService(
-            IConfiguration configuration, 
-            HttpClient httpClient, 
+            IConfiguration configuration,
+            HttpClient httpClient,
             ILogger<AIService> logger,
             IMemoryCache cache,
             PhygensContext context)
@@ -35,7 +35,7 @@ namespace BE_Phygens.Services
             try
             {
                 var provider = _configuration["AI:Provider"]?.ToLower() ?? "mock";
-                
+
                 // Check cache first
                 var cacheKey = $"ai_question_{chapter.ChapterId}_{request.DifficultyLevel}_{request.QuestionType}";
                 if (_cache.TryGetValue(cacheKey, out QuestionDto? cachedQuestion) && cachedQuestion != null)
@@ -65,13 +65,13 @@ namespace BE_Phygens.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating AI question");
-                
+
                 // Fallback to mock if enabled
                 if (_configuration.GetValue<bool>("AI:FallbackToMock", true))
                 {
                     return CreateMockQuestion(chapter, request);
                 }
-                
+
                 throw;
             }
         }
@@ -85,7 +85,7 @@ namespace BE_Phygens.Services
             {
                 var chapter = await _context.Set<Chapter>()
                     .FirstOrDefaultAsync(c => c.ChapterId == spec.ChapterId && c.IsActive);
-                
+
                 if (chapter == null) continue;
 
                 for (int i = 0; i < spec.Count; i++)
@@ -175,7 +175,7 @@ namespace BE_Phygens.Services
                     _ => ""
                 };
 
-                var suggestions = string.IsNullOrEmpty(suggestionsText) 
+                var suggestions = string.IsNullOrEmpty(suggestionsText)
                     ? CreateMockTopicSuggestions(chapter)
                     : ParseTopicSuggestions(suggestionsText);
 
@@ -216,11 +216,11 @@ namespace BE_Phygens.Services
             {
                 // Analyze student performance
                 var performance = await AnalyzeStudentPerformance(studentId, chapterId);
-                
+
                 // Generate adaptive questions based on performance
                 var chapter = await _context.Set<Chapter>()
                     .FirstOrDefaultAsync(c => c.ChapterId == chapterId);
-                
+
                 if (chapter == null) return new List<QuestionDto>();
 
                 var questions = new List<QuestionDto>();
@@ -260,12 +260,12 @@ namespace BE_Phygens.Services
                 {
                     var chapter = await _context.Set<Chapter>()
                         .FirstOrDefaultAsync(c => c.ChapterId == chapterReq.ChapterId);
-                    
+
                     if (chapter == null) continue;
 
                     // Distribute questions by difficulty
                     var distribution = CalculateDifficultyDistribution(chapterReq.QuestionCount, request.DifficultyDistribution);
-                    
+
                     foreach (var (difficulty, count) in distribution)
                     {
                         for (int i = 0; i < count; i++)
@@ -279,7 +279,7 @@ namespace BE_Phygens.Services
                             };
 
                             var question = await GenerateQuestionAsync(chapter, questionRequest);
-                            
+
                             questions.Add(new ExamQuestionDto
                             {
                                 ExamQuestionId = Guid.NewGuid().ToString(),
@@ -315,9 +315,9 @@ namespace BE_Phygens.Services
         {
             var provider = _configuration["AI:Provider"] ?? "OpenAI";
             var isConfigured = !string.IsNullOrEmpty(_configuration[$"AI:{provider}:ApiKey"]);
-            
+
             var usage = await GetUsageStatistics();
-            
+
             return new AIConfigDto
             {
                 Provider = provider,
@@ -359,7 +359,7 @@ namespace BE_Phygens.Services
 
                 var isSuccess = !string.IsNullOrEmpty(response) && response.Trim().Length > 0;
                 _logger.LogInformation($"{provider} connection test result: {isSuccess}");
-                
+
                 return isSuccess;
             }
             catch (HttpRequestException httpEx) when (httpEx.Message.Contains("429") || httpEx.Message.Contains("Too Many Requests"))
@@ -391,7 +391,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallOpenAIAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -405,7 +405,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallGeminiAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -419,7 +419,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallClaudeAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -433,7 +433,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallGroqAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -447,7 +447,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallHuggingFaceAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -461,7 +461,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallTogetherAIAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -475,7 +475,7 @@ namespace BE_Phygens.Services
 
             var prompt = BuildPhysicsQuestionPrompt(chapter, request);
             var response = await CallOpenRouterAsync(prompt);
-            
+
             return ParseAIQuestionResponse(response, chapter, request);
         }
 
@@ -509,7 +509,7 @@ namespace BE_Phygens.Services
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
             var aiResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent);
-            
+
             return aiResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
         }
 
@@ -533,11 +533,11 @@ namespace BE_Phygens.Services
             };
 
             var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
-            
+
             _httpClient.DefaultRequestHeaders.Clear();
-            
+
             _logger.LogInformation($"Calling Gemini API with model: {model}");
-            
+
             var response = await _httpClient.PostAsync(
                 url,
                 new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
@@ -545,14 +545,14 @@ namespace BE_Phygens.Services
 
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
-            
+
             _logger.LogInformation($"Gemini raw response: {responseContent}");
-            
+
             var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseContent);
             var extractedText = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text ?? "";
-            
+
             _logger.LogInformation($"Gemini extracted text: '{extractedText}' (Length: {extractedText.Length})");
-            
+
             return extractedText;
         }
 
@@ -584,7 +584,7 @@ namespace BE_Phygens.Services
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
             var claudeResponse = JsonSerializer.Deserialize<ClaudeResponse>(responseContent);
-            
+
             return claudeResponse?.Content?.FirstOrDefault()?.Text ?? "";
         }
 
@@ -617,14 +617,14 @@ namespace BE_Phygens.Services
 
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
-            
+
             _logger.LogInformation($"Groq raw response: {responseContent}");
-            
+
             var groqResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
             var extractedContent = groqResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
-            
+
             _logger.LogInformation($"Groq extracted content: '{extractedContent}' (Length: {extractedContent.Length})");
-            
+
             return extractedContent;
         }
 
@@ -648,7 +648,7 @@ namespace BE_Phygens.Services
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
             var url = $"https://api-inference.huggingface.co/models/{model}";
-            
+
             var response = await _httpClient.PostAsync(
                 url,
                 new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
@@ -656,10 +656,10 @@ namespace BE_Phygens.Services
 
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
-            
+
             // HuggingFace returns array format
             var hfResponse = JsonSerializer.Deserialize<HuggingFaceResponse[]>(responseContent);
-            
+
             return hfResponse?.FirstOrDefault()?.GeneratedText ?? "";
         }
 
@@ -693,7 +693,7 @@ namespace BE_Phygens.Services
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
             var togetherResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
-            
+
             return togetherResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
         }
 
@@ -728,7 +728,7 @@ namespace BE_Phygens.Services
             response.EnsureSuccessStatusCode();
             var responseContent = await response.Content.ReadAsStringAsync();
             var openRouterResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent); // Same format as OpenAI
-            
+
             return openRouterResponse?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
         }
 
@@ -751,8 +751,35 @@ namespace BE_Phygens.Services
                 "multiple_choice" => "trắc nghiệm 4 lựa chọn",
                 "true_false" => "đúng/sai",
                 "calculation" => "tính toán có lời giải",
+                "essay" => "tự luận",
                 _ => "trắc nghiệm 4 lựa chọn"
             };
+
+            // Tạo prompt khác nhau cho essay vs multiple choice
+            if (request.QuestionType == "essay")
+            {
+                return $@"
+Tạo một câu hỏi tự luận Vật lý về chương ""{chapter.ChapterName}"" (lớp {chapter.Grade}) với độ khó {difficultyDesc}.
+
+Yêu cầu chất lượng cao:
+1. Câu hỏi phải chính xác về mặt khoa học và phù hợp chương trình THPT Việt Nam
+2. Yêu cầu học sinh giải thích, phân tích hoặc tính toán chi tiết
+3. Có câu trả lời mẫu đầy đủ và logic
+4. Sử dụng thuật ngữ và ký hiệu Vật lý chuẩn
+5. Khuyến khích tư duy phản biện và ứng dụng thực tế
+{(string.IsNullOrEmpty(request.SpecificTopic) ? "" : $"6. Tập trung vào chủ đề cụ thể: {request.SpecificTopic}")}
+{(string.IsNullOrEmpty(request.AdditionalInstructions) ? "" : $"7. Yêu cầu bổ sung: {request.AdditionalInstructions}")}
+
+Trả về theo định dạng JSON chính xác:
+{{
+  ""question"": ""Nội dung câu hỏi tự luận"",
+  ""sampleAnswer"": ""Câu trả lời mẫu chi tiết"",
+  ""keyPoints"": [""điểm mấu chốt 1"", ""điểm mấu chốt 2"", ""điểm mấu chốt 3""],
+  ""explanation"": ""Hướng dẫn giải chi tiết"",
+  ""difficulty"": ""{request.DifficultyLevel}"",
+  ""topic"": ""{chapter.ChapterName}""
+}}";
+            }
 
             return $@"
 Tạo một câu hỏi Vật lý {typeDesc} về chương ""{chapter.ChapterName}"" (lớp {chapter.Grade}) với độ khó {difficultyDesc}.
@@ -781,13 +808,13 @@ Trả về theo định dạng JSON chính xác:
 }}";
         }
 
-        private QuestionDto ParseAIQuestionResponse(string aiResponse, Chapter chapter, GenerateQuestionRequest request)
+                private QuestionDto ParseAIQuestionResponse(string aiResponse, Chapter chapter, GenerateQuestionRequest request)
         {
             try
             {
                 var parsedResponse = JsonSerializer.Deserialize<AIQuestionResponse>(aiResponse);
                 
-                return new QuestionDto
+                var questionDto = new QuestionDto
                 {
                     QuestionId = Guid.NewGuid().ToString(),
                     Topic = parsedResponse?.Topic ?? chapter.ChapterName,
@@ -797,15 +824,30 @@ Trả về theo định dạng JSON chính xác:
                     ImageUrl = "",
                     CreatedBy = "AI_System",
                     CreatedAt = DateTime.UtcNow,
-                    AnswerChoices = parsedResponse?.Choices?.Select(c => new AnswerChoiceDto
+                    Explanation = parsedResponse?.Explanation ?? ""
+                };
+
+                // Xử lý khác nhau cho essay vs multiple choice
+                if (request.QuestionType == "essay")
+                {
+                    // Cho essay questions, không có answer choices
+                    questionDto.AnswerChoices = new List<AnswerChoiceDto>();
+                    // Sample answer và key points sẽ được lưu trong explanation hoặc metadata
+                }
+                else
+                {
+                    // Cho multiple choice questions
+                    questionDto.AnswerChoices = parsedResponse?.Choices?.Select(c => new AnswerChoiceDto
                     {
                         ChoiceId = Guid.NewGuid().ToString(),
                         ChoiceLabel = c.Label,
                         ChoiceText = c.Text,
                         IsCorrect = c.IsCorrect,
                         DisplayOrder = c.Label[0] - 'A' + 1
-                    }).ToList() ?? new List<AnswerChoiceDto>()
-                };
+                    }).ToList() ?? new List<AnswerChoiceDto>();
+                }
+
+                return questionDto;
             }
             catch (Exception ex)
             {
@@ -835,15 +877,15 @@ Trả về theo định dạng JSON chính xác:
         private Dictionary<string, int> CalculateDifficultyDistribution(int totalQuestions, DifficultyDistribution distribution)
         {
             var result = new Dictionary<string, int>();
-            
+
             var easyCount = (int)Math.Round(totalQuestions * distribution.EasyPercentage / 100.0);
             var hardCount = (int)Math.Round(totalQuestions * distribution.HardPercentage / 100.0);
             var mediumCount = totalQuestions - easyCount - hardCount;
-            
+
             if (easyCount > 0) result["easy"] = easyCount;
             if (mediumCount > 0) result["medium"] = mediumCount;
             if (hardCount > 0) result["hard"] = hardCount;
-            
+
             return result;
         }
         private decimal CalculateQuestionPoints(string difficulty) => difficulty switch { "easy" => 1, "medium" => 2, "hard" => 3, _ => 2 };
@@ -913,6 +955,10 @@ Trả về theo định dạng JSON chính xác:
             public string? Explanation { get; set; }
             public string? Difficulty { get; set; }
             public string? Topic { get; set; }
+            
+            // Essay-specific properties
+            public string? SampleAnswer { get; set; }
+            public string[]? KeyPoints { get; set; }
         }
 
         private class AIChoiceResponse
@@ -937,4 +983,4 @@ Trả về theo định dạng JSON chính xác:
 
         #endregion
     }
-} 
+}

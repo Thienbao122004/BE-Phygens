@@ -606,4 +606,91 @@ namespace BE_Phygens.Dto
         public bool SaveToDatabase { get; set; } = true;
         public bool ShuffleQuestions { get; set; } = false;
     }
+
+    // ========== ESSAY QUESTION DTOS ==========
+    public class EssayQuestionDto : QuestionDto
+    {
+        public string? SampleAnswer { get; set; }
+        public List<string> KeyPoints { get; set; } = new();
+        public int MaxWords { get; set; } = 500;
+        public int MinWords { get; set; } = 50;
+        public List<EssayGradingCriteria> GradingCriteria { get; set; } = new();
+        public string? GradingRubric { get; set; }
+    }
+
+    public class EssayGradingCriteria
+    {
+        public string CriteriaName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public int MaxPoints { get; set; }
+        public List<string> Indicators { get; set; } = new();
+    }
+
+    public class GenerateEssayQuestionRequest : GenerateQuestionRequest
+    {
+        public int MaxWords { get; set; } = 500;
+        public int MinWords { get; set; } = 50;
+        public bool IncludeSampleAnswer { get; set; } = true;
+        public bool IncludeGradingRubric { get; set; } = true;
+        public List<string>? RequiredKeyPoints { get; set; }
+        public string EssayStyle { get; set; } = "analytical"; // analytical, descriptive, argumentative, comparative
+    }
+
+    public class EssayAnswerSubmissionDto
+    {
+        public string StudentAnswer { get; set; } = string.Empty;
+        public string QuestionId { get; set; } = string.Empty;
+        public string StudentId { get; set; } = string.Empty;
+        public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
+        public int WordCount { get; set; }
+    }
+
+    public class EssayGradingResultDto
+    {
+        public string QuestionId { get; set; } = string.Empty;
+        public string StudentAnswer { get; set; } = string.Empty;
+        public double TotalScore { get; set; }
+        public double MaxScore { get; set; }
+        public List<CriteriaScore> CriteriaScores { get; set; } = new();
+        public string OverallFeedback { get; set; } = string.Empty;
+        public List<string> Strengths { get; set; } = new();
+        public List<string> AreasForImprovement { get; set; } = new();
+        public bool IsPlausible { get; set; }
+        public DateTime GradedAt { get; set; } = DateTime.UtcNow;
+        public string GradingMethod { get; set; } = "AI"; // AI, Manual, Hybrid
+    }
+
+    public class CriteriaScore
+    {
+        public string CriteriaName { get; set; } = string.Empty;
+        public double Score { get; set; }
+        public double MaxScore { get; set; }
+        public string Feedback { get; set; } = string.Empty;
+        public List<string> KeyPointsFound { get; set; } = new();
+        public List<string> MissingKeyPoints { get; set; } = new();
+    }
+
+    public class EssayAnalysisDto
+    {
+        public int WordCount { get; set; }
+        public double ReadabilityScore { get; set; }
+        public List<string> DetectedKeywords { get; set; } = new();
+        public string LanguageQuality { get; set; } = string.Empty;
+        public string Coherence { get; set; } = string.Empty;
+        public List<string> GrammarIssues { get; set; } = new();
+        public List<string> SuggestedImprovements { get; set; } = new();
+    }
+
+    public class EssayBatchGradingRequest
+    {
+        public List<EssayAnswerSubmissionDto> Submissions { get; set; } = new();
+        public bool UseStrictGrading { get; set; } = false;
+        public bool ProvideDetailedFeedback { get; set; } = true;
+        public string GradingStyle { get; set; } = "balanced"; // strict, balanced, lenient
+    }
+
+    public class GenerateExplanationRequest
+    {
+        public string QuestionId { get; set; } = string.Empty;
+    }
 } 

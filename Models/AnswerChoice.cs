@@ -26,7 +26,7 @@ namespace BE_Phygens.Models
         public bool IsCorrect { get; set; } = false;
 
         [Column("displayorder")]
-        public int? DisplayOrder { get; set; }
+        public int DisplayOrder { get; set; } = 1;
 
         // Navigation properties
         [ForeignKey("QuestionId")]

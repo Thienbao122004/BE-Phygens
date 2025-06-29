@@ -11,7 +11,7 @@ namespace BE_Phygens.Controllers
 {
     [Route("ai-question")]
     [ApiController]
-    // [Authorize]
+    // [Authorize] // Bỏ auth để test
     public class AIQuestionController : ControllerBase
     {
         private readonly PhygensContext _context;
@@ -416,7 +416,7 @@ namespace BE_Phygens.Controllers
                         choiceText = ac.ChoiceText,
                         isCorrect = ac.IsCorrect,
                         choiceLabel = ac.ChoiceLabel ?? "A",
-                        displayOrder = ac.DisplayOrder ?? 0
+                        displayOrder = ac.DisplayOrder
                     }).ToList()
                 }).ToList();
 
@@ -681,6 +681,66 @@ namespace BE_Phygens.Controllers
             }
         }
 
+        /// <summary>
+        /// Generate explanation for a question using AI
+        /// POST: ai-question/generate-explanation
+        /// </summary>
+        [HttpPost("generate-explanation")]
+        public async Task<IActionResult> GenerateExplanation([FromBody] GenerateExplanationRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.QuestionId))
+                {
+                    return BadRequest(new { error = "validation_error", message = "QuestionId là bắt buộc" });
+                }
+
+                // Lấy thông tin câu hỏi
+                var question = await _context.Questions
+                    .Include(q => q.Topic)
+                    .FirstOrDefaultAsync(q => q.QuestionId == request.QuestionId);
+
+                if (question == null)
+                {
+                    return NotFound(new { error = "not_found", message = "Không tìm thấy câu hỏi" });
+                }
+
+                // Lấy answer choices
+                var answerChoices = await _context.AnswerChoices
+                    .Where(ac => ac.QuestionId == request.QuestionId)
+                    .OrderBy(ac => (int?)ac.DisplayOrder ?? 1)
+                    .ThenBy(ac => ac.ChoiceLabel)
+                    .ToListAsync();
+
+                // Tìm đáp án đúng
+                var correctChoice = answerChoices.FirstOrDefault(ac => ac.IsCorrect);
+                var correctAnswer = correctChoice != null 
+                    ? $"{correctChoice.ChoiceLabel}. {correctChoice.ChoiceText}"
+                    : "Không xác định được đáp án đúng";
+
+                // Tạo explanation bằng AI service
+                var explanation = await _aiService.GenerateExplanationAsync(question, correctAnswer);
+
+                if (string.IsNullOrEmpty(explanation))
+                {
+                    return StatusCode(500, new { error = "ai_error", message = "Không thể tạo giải thích bằng AI" });
+                }
+
+                return Ok(new
+                {
+                    questionId = request.QuestionId,
+                    explanation = explanation,
+                    generatedAt = DateTime.UtcNow,
+                    message = "Tạo giải thích thành công"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo explanation cho câu hỏi {QuestionId}", request.QuestionId);
+                return StatusCode(500, new { error = "internal_error", message = "Có lỗi xảy ra khi tạo giải thích" });
+            }
+        }
+
         #region Helper Methods
 
         private async Task SaveQuestionToDatabase(QuestionDto questionDto)
@@ -909,7 +969,7 @@ namespace BE_Phygens.Controllers
                         ChoiceLabel = ac.ChoiceLabel ?? "A",
                         ChoiceText = ac.ChoiceText,
                         IsCorrect = ac.IsCorrect,
-                        DisplayOrder = ac.DisplayOrder ?? 0
+                        DisplayOrder = ac.DisplayOrder
                     }).ToList() ?? new List<AnswerChoiceDto>()
                 }).ToList();
             }
