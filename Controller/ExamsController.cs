@@ -74,8 +74,13 @@ namespace BE_Phygens.Controllers
                     {
                         QuestionId = eq.Question.QuestionId,
                         QuestionText = eq.Question.QuestionText,
+                        QuestionType = eq.Question.QuestionType,
                         Difficulty = eq.Question.DifficultyLevel,
-                        Topic = eq.Question.Topic?.TopicName ?? ""
+                        Topic = eq.Question.Topic?.TopicName ?? "",
+                        // Basic essay properties for list view
+                        MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 50 : null,
+                        MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
+                        EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null
                     } : null
                 }).ToList() ?? new List<ExamQuestionResponseDto>()
             }).ToList();
@@ -127,6 +132,7 @@ namespace BE_Phygens.Controllers
                     {
                         QuestionId = eq.Question.QuestionId,
                         QuestionText = eq.Question.QuestionText,
+                        QuestionType = eq.Question.QuestionType,
                         Difficulty = eq.Question.DifficultyLevel,
                         Topic = eq.Question.Topic?.TopicName ?? "",
                         AnswerChoices = eq.Question.AnswerChoices?.Select(ac => new AnswerChoiceResponseDto
@@ -135,8 +141,15 @@ namespace BE_Phygens.Controllers
                             ChoiceLabel = ac.ChoiceLabel,
                             ChoiceText = ac.ChoiceText,
                             IsCorrect = ac.IsCorrect,
-                            DisplayOrder = ac.DisplayOrder ?? 0
-                        }).ToList() ?? new List<AnswerChoiceResponseDto>()
+                            DisplayOrder = ac.DisplayOrder
+                        }).ToList() ?? new List<AnswerChoiceResponseDto>(),
+                        // Map essay-specific properties from metadata
+                        MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 1 : null,
+                        MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
+                        EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null,
+                        KeyPoints = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<List<string>>(eq.Question.AiGenerationMetadata, "keyPoints") : null,
+                        GradingRubric = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "gradingRubric") : null,
+                        SampleAnswer = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "sampleAnswer") : null
                     } : null
                 }).ToList() ?? new List<ExamQuestionResponseDto>()
             };
@@ -429,12 +442,43 @@ namespace BE_Phygens.Controllers
                         // ✅ Create placeholder questions in DB first, then add to exam
                         var placeholderQuestions = new List<Question>();
                         
-                        for (int i = 0; i < remaining; i++)
+                        // Calculate how many of each type to create
+                        int multipleChoiceCount = 0;
+                        int essayCount = 0;
+                        
+                        if (generateDto.IncludeMultipleChoice && generateDto.IncludeEssay)
+                        {
+                            // Use custom ratio if specified, otherwise default 70% multiple choice
+                            decimal mcPercentage = generateDto.CustomRatio ? 
+                                (decimal)generateDto.MultipleChoicePercentage / 100 : 0.7m;
+                            multipleChoiceCount = (int)(remaining * mcPercentage);
+                            essayCount = remaining - multipleChoiceCount;
+                            
+                            Console.WriteLine($"📊 Custom ratio: MC={generateDto.MultipleChoicePercentage}%, Essay={100-generateDto.MultipleChoicePercentage}%");
+                        }
+                        else if (generateDto.IncludeMultipleChoice)
+                        {
+                            multipleChoiceCount = remaining;
+                        }
+                        else if (generateDto.IncludeEssay)
+                        {
+                            essayCount = remaining;
+                        }
+                        else
+                        {
+                            // Default fallback - create multiple choice
+                            multipleChoiceCount = remaining;
+                        }
+                        
+                        int questionCounter = 1;
+                        
+                        // Create multiple choice questions
+                        for (int i = 0; i < multipleChoiceCount; i++)
                         {
                             var placeholderQuestion = new Question
                             {
                                 QuestionId = Guid.NewGuid().ToString(),
-                                QuestionText = $"[AI Generated Question {i + 1}] - {chapter.ChapterName}",
+                                QuestionText = $"[AI Generated Multiple Choice Question {questionCounter}] - {chapter.ChapterName}",
                                 QuestionType = "multiple_choice",
                                 DifficultyLevel = generateDto.DifficultyLevel ?? "medium",
                                 CreatedBy = createdBy,
@@ -447,6 +491,37 @@ namespace BE_Phygens.Controllers
 
                             _context.Questions.Add(placeholderQuestion);
                             placeholderQuestions.Add(placeholderQuestion);
+                            questionCounter++;
+                        }
+                        
+                        // Create essay questions
+                        for (int i = 0; i < essayCount; i++)
+                        {
+                            var placeholderQuestion = new Question
+                            {
+                                QuestionId = Guid.NewGuid().ToString(),
+                                QuestionText = $"[AI Generated Essay Question {questionCounter}] - {chapter.ChapterName}",
+                                QuestionType = "essay",
+                                DifficultyLevel = generateDto.DifficultyLevel ?? "medium",
+                                CreatedBy = createdBy,
+                                CreatedAt = DateTime.UtcNow,
+                                TopicId = "TOPIC_001", // Default topic
+                                ChapterId = generateDto.ChapterId.Value,
+                                IsActive = true,
+                                AiGenerated = true,
+                                // Add essay-specific metadata
+                                AiGenerationMetadata = JsonSerializer.Serialize(new {
+                                    questionType = "essay",
+                                    minWords = 50,
+                                    maxWords = 300,
+                                    essayStyle = "analytical",
+                                    generatedAt = DateTime.UtcNow
+                                })
+                            };
+
+                            _context.Questions.Add(placeholderQuestion);
+                            placeholderQuestions.Add(placeholderQuestion);
+                            questionCounter++;
                         }
                         
                         // ✅ Save placeholder questions to database first
@@ -538,6 +613,27 @@ namespace BE_Phygens.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetExamById), new { id = exam.ExamId }, exam);
+        }
+
+        private T GetEssayMetadataProperty<T>(string? jsonMetadata, string propertyName)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonMetadata))
+                    return default(T);
+
+                var metadata = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonMetadata);
+                if (metadata != null && metadata.ContainsKey(propertyName))
+                {
+                    var element = metadata[propertyName];
+                    return JsonSerializer.Deserialize<T>(element.GetRawText());
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing essay metadata: {ex.Message}");
+            }
+            return default(T);
         }
 
         private string GetOrCreateDefaultUser()

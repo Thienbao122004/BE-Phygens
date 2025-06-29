@@ -16,109 +16,215 @@ namespace BE_Phygens.Services
 
         public async Task<QuestionGradingResult> GradeSingleQuestionAsync(string questionId, string studentChoiceId, string? studentUserId)
         {
-            // Lấy thông tin câu hỏi và đáp án đúng
-            var question = await _context.Questions
-                .Include(q => q.AnswerChoices)
-                .FirstOrDefaultAsync(q => q.QuestionId == questionId);
-
-            if (question == null)
+            try
             {
-                throw new ArgumentException("Không tìm thấy câu hỏi");
-            }
+                // Lấy thông tin câu hỏi trước
+                var question = await _context.Questions
+                    .Include(q => q.Topic)
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionId);
 
-            // Lấy lựa chọn của học sinh
-            var studentChoice = await _context.AnswerChoices
-                .FirstOrDefaultAsync(c => c.ChoiceId == studentChoiceId && c.QuestionId == questionId);
-
-            if (studentChoice == null)
-            {
-                throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
-            }
-
-            // Lấy đáp án đúng
-            var correctChoice = question.AnswerChoices.FirstOrDefault(c => c.IsCorrect);
-            if (correctChoice == null)
-            {
-                throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
-            }
-
-            // Kiểm tra đáp án
-            bool isCorrect = studentChoice.IsCorrect;
-            decimal pointsEarned = isCorrect ? 1.0m : 0.0m; // Mặc định 1 điểm cho câu đúng
-
-            // Lấy giải thích cho câu hỏi
-            var explanation = await _context.Explanations
-                .FirstOrDefaultAsync(e => e.QuestionId == questionId);
-
-            // Tạo kết quả
-            var result = new QuestionGradingResult
-            {
-                QuestionId = questionId,
-                CorrectChoiceId = correctChoice.ChoiceId,
-                CorrectChoiceLabel = correctChoice.ChoiceLabel,
-                CorrectChoiceText = correctChoice.ChoiceText,
-                StudentChoiceId = studentChoice.ChoiceId,
-                StudentChoiceLabel = studentChoice.ChoiceLabel,
-                StudentChoiceText = studentChoice.ChoiceText,
-                IsCorrect = isCorrect,
-                PointsEarned = (double)pointsEarned,
-                MaxPoints = 1.0, // Mặc định 1 điểm tối đa
-                Feedback = isCorrect ? "Chính xác!" : "Chưa chính xác",
-                Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
-                DifficultyLevel = question.DifficultyLevel,
-                QuestionType = question.QuestionType,
-                GradedAt = DateTime.UtcNow
-            };
-
-            // Lưu kết quả vào lịch sử nếu có studentUserId
-            if (!string.IsNullOrEmpty(studentUserId))
-            {
-                // Tìm exam question để lấy examId
-                var examQuestion = await _context.ExamQuestions
-                    .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
-
-                if (examQuestion == null)
+                if (question == null)
                 {
-                    throw new ArgumentException("Không tìm thấy câu hỏi trong bài thi");
+                    throw new ArgumentException("Không tìm thấy câu hỏi");
                 }
 
-                // Tạo một attempt mới cho lần trả lời này
-                var attempt = new StudentAttempt
+                // Kiểm tra loại câu hỏi
+                if (question.QuestionType?.ToLower() == "essay")
                 {
-                    AttemptId = Guid.NewGuid().ToString(),
-                    UserId = studentUserId,
-                    ExamId = examQuestion.ExamId,
-                    StartTime = DateTime.UtcNow,
-                    EndTime = DateTime.UtcNow,
-                    TotalScore = pointsEarned,
-                    MaxScore = 1.0m,
-                    Status = "completed"
-                };
-                _context.StudentAttempts.Add(attempt);
+                    // Xử lý câu hỏi tự luận
+                    // Với câu hỏi tự luận, studentChoiceId thực chất là nội dung bài làm
+                    var essayAnswer = studentChoiceId; // Tạm thời sử dụng studentChoiceId như là nội dung
 
-                var studentAnswer = new StudentAnswer
+                    var result = new QuestionGradingResult
+                    {
+                        QuestionId = questionId,
+                        CorrectChoiceId = "",
+                        CorrectChoiceLabel = "",
+                        CorrectChoiceText = "Câu hỏi tự luận - cần chấm thủ công",
+                        StudentChoiceId = "",
+                        StudentChoiceLabel = "",
+                        StudentChoiceText = essayAnswer ?? "",
+                        IsCorrect = false, // Tạm thời để false, cần chấm thủ công
+                        PointsEarned = 0, // Tạm thời 0 điểm, cần chấm thủ công
+                        MaxPoints = 1.0,
+                        Feedback = "Câu hỏi tự luận cần được chấm thủ công",
+                        Explanation = "Đây là câu hỏi tự luận, cần giáo viên chấm điểm",
+                        DifficultyLevel = question.DifficultyLevel ?? "",
+                        QuestionType = question.QuestionType ?? "",
+                        GradedAt = DateTime.UtcNow
+                    };
+
+                    // Lưu câu trả lời tự luận nếu có studentUserId
+                    if (!string.IsNullOrEmpty(studentUserId))
+                    {
+                        var examQuestion = await _context.ExamQuestions
+                            .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
+
+                        if (examQuestion != null)
+                        {
+                            var attempt = new StudentAttempt
+                            {
+                                AttemptId = Guid.NewGuid().ToString(),
+                                UserId = studentUserId,
+                                ExamId = examQuestion.ExamId,
+                                StartTime = DateTime.UtcNow,
+                                EndTime = DateTime.UtcNow,
+                                TotalScore = 0, // Chờ chấm thủ công
+                                MaxScore = 1.0m,
+                                Status = "completed"
+                            };
+                            _context.StudentAttempts.Add(attempt);
+
+                            var studentAnswer = new StudentAnswer
+                            {
+                                AnswerId = Guid.NewGuid().ToString(),
+                                AttemptId = attempt.AttemptId,
+                                QuestionId = questionId,
+                                SelectedChoiceId = null,
+                                StudentTextAnswer = essayAnswer, // Lưu nội dung tự luận
+                                IsCorrect = false, // Chờ chấm thủ công
+                                PointsEarned = 0, // Chờ chấm thủ công
+                                AnsweredAt = DateTime.UtcNow
+                            };
+
+                            _context.StudentAnswers.Add(studentAnswer);
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+
+                    return result;
+                }
+
+                // Xử lý câu hỏi trắc nghiệm như cũ
+                // Query AnswerChoices bằng projection để tránh NULL displayOrder issues
+                var answerChoicesData = await _context.AnswerChoices
+                    .Where(ac => ac.QuestionId == questionId)
+                    .Select(ac => new
+                    {
+                        ac.ChoiceId,
+                        ac.QuestionId,
+                        ac.ChoiceLabel,
+                        ac.ChoiceText,
+                        ac.IsCorrect,
+                        DisplayOrder = (int?)ac.DisplayOrder ?? 1 // Cast tới nullable để xử lý NULL từ database
+                    })
+                    .OrderBy(ac => ac.DisplayOrder)
+                    .ThenBy(ac => ac.ChoiceLabel)
+                    .ToListAsync();
+
+                if (!answerChoicesData.Any())
                 {
-                    AnswerId = Guid.NewGuid().ToString(),
-                    AttemptId = attempt.AttemptId,
+                    throw new ArgumentException("Câu hỏi không có lựa chọn đáp án");
+                }
+
+                var studentChoiceData = answerChoicesData
+                    .FirstOrDefault(c => c.ChoiceId == studentChoiceId);
+
+                if (studentChoiceData == null)
+                {
+                    throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
+                }
+
+                // Lấy đáp án đúng từ answerChoicesData
+                var correctChoiceData = answerChoicesData.FirstOrDefault(c => c.IsCorrect);
+                if (correctChoiceData == null)
+                {
+                    throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
+                }
+
+                // Kiểm tra đáp án
+                bool isCorrect = studentChoiceData.IsCorrect;
+                decimal pointsEarned = isCorrect ? 1.0m : 0.0m; // Mặc định 1 điểm cho câu đúng
+
+                // Lấy giải thích cho câu hỏi
+                var explanation = await _context.Explanations
+                    .FirstOrDefaultAsync(e => e.QuestionId == questionId);
+
+                // Debug: Log dữ liệu trước khi tạo result
+                _logger.LogInformation("Debug AutoGrading - Question {QuestionId}: Student={StudentLabel}.{StudentText}, Correct={CorrectLabel}.{CorrectText}", 
+                    questionId, 
+                    studentChoiceData.ChoiceLabel, studentChoiceData.ChoiceText,
+                    correctChoiceData.ChoiceLabel, correctChoiceData.ChoiceText);
+
+                // Tạo kết quả
+                var multipleChoiceResult = new QuestionGradingResult
+                {
                     QuestionId = questionId,
-                    SelectedChoiceId = studentChoiceId,
+                    CorrectChoiceId = correctChoiceData.ChoiceId ?? "",
+                    CorrectChoiceLabel = correctChoiceData.ChoiceLabel ?? "",
+                    CorrectChoiceText = correctChoiceData.ChoiceText ?? "",
+                    StudentChoiceId = studentChoiceData.ChoiceId ?? "",
+                    StudentChoiceLabel = studentChoiceData.ChoiceLabel ?? "",
+                    StudentChoiceText = studentChoiceData.ChoiceText ?? "",
                     IsCorrect = isCorrect,
-                    PointsEarned = pointsEarned,
-                    AnsweredAt = DateTime.UtcNow
+                    PointsEarned = (double)pointsEarned,
+                    MaxPoints = 1.0, 
+                    Feedback = isCorrect ? "Chính xác!" : "Chưa chính xác",
+                    Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
+                    DifficultyLevel = question.DifficultyLevel ?? "",
+                    QuestionType = question.QuestionType ?? "",
+                    GradedAt = DateTime.UtcNow
                 };
 
-                _context.StudentAnswers.Add(studentAnswer);
-                await _context.SaveChangesAsync();
-            }
+                // Debug: Log kết quả được tạo
+                _logger.LogInformation("Debug AutoGrading - Result created: StudentChoice={StudentLabel}.{StudentText}, CorrectChoice={CorrectLabel}.{CorrectText}",
+                    multipleChoiceResult.StudentChoiceLabel, multipleChoiceResult.StudentChoiceText,
+                    multipleChoiceResult.CorrectChoiceLabel, multipleChoiceResult.CorrectChoiceText);
 
-            return result;
+                // Lưu kết quả vào lịch sử nếu có studentUserId
+                if (!string.IsNullOrEmpty(studentUserId))
+                {
+                    // Tìm exam question để lấy examId
+                    var examQuestion = await _context.ExamQuestions
+                        .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
+
+                    if (examQuestion == null)
+                    {
+                        throw new ArgumentException("Không tìm thấy câu hỏi trong bài thi");
+                    }
+
+                    // Tạo một attempt mới cho lần trả lời này
+                    var attempt = new StudentAttempt
+                    {
+                        AttemptId = Guid.NewGuid().ToString(),
+                        UserId = studentUserId,
+                        ExamId = examQuestion.ExamId,
+                        StartTime = DateTime.UtcNow,
+                        EndTime = DateTime.UtcNow,
+                        TotalScore = pointsEarned,
+                        MaxScore = 1.0m,
+                        Status = "completed"
+                    };
+                    _context.StudentAttempts.Add(attempt);
+
+                    var studentAnswer = new StudentAnswer
+                    {
+                        AnswerId = Guid.NewGuid().ToString(),
+                        AttemptId = attempt.AttemptId,
+                        QuestionId = questionId,
+                        SelectedChoiceId = studentChoiceData.ChoiceId,
+                        IsCorrect = isCorrect,
+                        PointsEarned = pointsEarned,
+                        AnsweredAt = DateTime.UtcNow
+                    };
+
+                    _context.StudentAnswers.Add(studentAnswer);
+                    await _context.SaveChangesAsync();
+                }
+
+                return multipleChoiceResult;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi chấm câu hỏi {QuestionId}", questionId);
+                throw;
+            }
         }
 
         public async Task<DetailedFeedback> GetDetailedFeedbackAsync(string questionId, string studentChoiceId)
         {
-            // Lấy thông tin câu hỏi và các lựa chọn
+            // Lấy thông tin câu hỏi
             var question = await _context.Questions
-                .Include(q => q.AnswerChoices)
                 .FirstOrDefaultAsync(q => q.QuestionId == questionId);
 
             if (question == null)
@@ -126,18 +232,30 @@ namespace BE_Phygens.Services
                 throw new ArgumentException("Không tìm thấy câu hỏi");
             }
 
-            // Lấy lựa chọn của học sinh
-            var studentChoice = await _context.AnswerChoices
-                .FirstOrDefaultAsync(c => c.ChoiceId == studentChoiceId && c.QuestionId == questionId);
+            // Lấy choices với projection để tránh NULL displayOrder
+            var choicesData = await _context.AnswerChoices
+                .Where(ac => ac.QuestionId == questionId)
+                .Select(ac => new
+                {
+                    ac.ChoiceId,
+                    ac.ChoiceLabel,
+                    ac.ChoiceText,
+                    ac.IsCorrect,
+                    DisplayOrder = (int?)ac.DisplayOrder ?? 1 // Cast tới nullable để xử lý NULL từ database
+                })
+                .ToListAsync();
 
-            if (studentChoice == null)
+            var studentChoiceData = choicesData
+                .FirstOrDefault(c => c.ChoiceId == studentChoiceId);
+
+            if (studentChoiceData == null)
             {
                 throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
             }
 
             // Lấy đáp án đúng
-            var correctChoice = question.AnswerChoices.FirstOrDefault(c => c.IsCorrect);
-            if (correctChoice == null)
+            var correctChoiceData = choicesData.FirstOrDefault(c => c.IsCorrect);
+            if (correctChoiceData == null)
             {
                 throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
             }
@@ -155,12 +273,12 @@ namespace BE_Phygens.Services
             {
                 QuestionId = questionId,
                 QuestionText = question.QuestionText,
-                CorrectAnswer = $"{correctChoice.ChoiceLabel}. {correctChoice.ChoiceText}",
-                StudentAnswer = $"{studentChoice.ChoiceLabel}. {studentChoice.ChoiceText}",
-                IsCorrect = studentChoice.IsCorrect,
+                CorrectAnswer = $"{correctChoiceData.ChoiceLabel}. {correctChoiceData.ChoiceText}",
+                StudentAnswer = $"{studentChoiceData.ChoiceLabel}. {studentChoiceData.ChoiceText}",
+                IsCorrect = studentChoiceData.IsCorrect,
                 Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
-                CommonMistakeWarning = studentChoice.IsCorrect ? string.Empty : GetCommonMistakeWarning(question, studentChoice),
-                StudyTip = GetStudyTip(question, studentChoice.IsCorrect),
+                CommonMistakeWarning = studentChoiceData.IsCorrect ? string.Empty : "Đây là một lỗi phổ biến. Hãy chú ý đọc kỹ đề bài và xem lại phần lý thuyết liên quan.",
+                StudyTip = GetStudyTip(question, studentChoiceData.IsCorrect),
                 RelatedTopics = topic?.TopicName ?? "Chưa phân loại"
             };
 
@@ -188,11 +306,10 @@ namespace BE_Phygens.Services
 
         public async Task<ExamGradingResult> GradeExamAsync(string examId, List<StudentAnswerSubmission> studentAnswers, string studentUserId)
         {
-            // Lấy thông tin bài thi
+            // Lấy thông tin bài thi (không cần Include AnswerChoices vì sẽ query riêng)
             var exam = await _context.Exams
                 .Include(e => e.ExamQuestions)
                 .ThenInclude(eq => eq.Question)
-                .ThenInclude(q => q.AnswerChoices)
                 .FirstOrDefaultAsync(e => e.ExamId == examId);
 
             if (exam == null)
@@ -221,7 +338,22 @@ namespace BE_Phygens.Services
 
             foreach (var answer in studentAnswers)
             {
-                var result = await GradeSingleQuestionAsync(answer.QuestionId, answer.SelectedChoiceId, studentUserId);
+                // Xử lý khác nhau cho câu hỏi trắc nghiệm và tự luận
+                var question = exam.ExamQuestions.FirstOrDefault(eq => eq.QuestionId == answer.QuestionId)?.Question;
+                QuestionGradingResult result;
+
+                if (question?.QuestionType?.ToLower() == "essay")
+                {
+                    // Với câu hỏi tự luận, truyền studentTextAnswer làm studentChoiceId
+                    var essayContent = answer.StudentTextAnswer ?? "";
+                    result = await GradeSingleQuestionAsync(answer.QuestionId, essayContent, studentUserId);
+                }
+                else
+                {
+                    // Với câu hỏi trắc nghiệm, truyền selectedChoiceId
+                    result = await GradeSingleQuestionAsync(answer.QuestionId, answer.SelectedChoiceId, studentUserId);
+                }
+
                 questionResults.Add(result);
 
                 if (result.IsCorrect)
@@ -393,17 +525,15 @@ namespace BE_Phygens.Services
             
             if (string.IsNullOrEmpty(questionId))
             {
-                // Nếu không có questionId, lấy phân tích cho tất cả câu hỏi
+                // Nếu không có questionId, lấy phân tích cho tất cả câu hỏi (không Include AnswerChoices)
                 questions = await _context.Questions
-                    .Include(q => q.AnswerChoices)
                     .Include(q => q.Topic)
                     .ToListAsync();
             }
             else
             {
-                // Nếu có questionId, chỉ lấy phân tích cho câu hỏi đó
+                // Nếu có questionId, chỉ lấy phân tích cho câu hỏi đó (không Include AnswerChoices)
                 var question = await _context.Questions
-                    .Include(q => q.AnswerChoices)
                     .Include(q => q.Topic)
                     .FirstOrDefaultAsync(q => q.QuestionId == questionId);
 
@@ -626,13 +756,24 @@ namespace BE_Phygens.Services
         public async Task<List<CommonMistake>> GetCommonMistakesAsync(string questionId)
         {
             var question = await _context.Questions
-                .Include(q => q.AnswerChoices)
                 .FirstOrDefaultAsync(q => q.QuestionId == questionId);
 
             if (question == null)
             {
                 throw new ArgumentException("Không tìm thấy câu hỏi");
             }
+
+            // Lấy AnswerChoices riêng biệt bằng projection để tránh NULL displayOrder
+            var answerChoices = await _context.AnswerChoices
+                .Where(ac => ac.QuestionId == questionId)
+                .Select(ac => new
+                {
+                    ac.ChoiceId,
+                    ac.ChoiceText,
+                    ac.IsCorrect,
+                    DisplayOrder = (int?)ac.DisplayOrder ?? 1 // Cast tới nullable để xử lý NULL từ database
+                })
+                .ToListAsync();
 
             // Lấy tất cả các lần trả lời sai cho câu hỏi này
             var incorrectAnswers = await _context.StudentAnswers
@@ -653,7 +794,7 @@ namespace BE_Phygens.Services
 
             foreach (var answer in incorrectAnswers)
             {
-                var choice = question.AnswerChoices.FirstOrDefault(c => c.ChoiceId == answer.ChoiceId);
+                var choice = answerChoices.FirstOrDefault(c => c.ChoiceId == answer.ChoiceId);
                 if (choice != null)
                 {
                     commonMistakes.Add(new CommonMistake

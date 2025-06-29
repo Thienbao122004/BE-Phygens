@@ -42,6 +42,10 @@ namespace BE_Phygens.Dto
         public bool IncludeMultipleChoice { get; set; } = true;
         public bool IncludeEssay { get; set; } = true;
         public int? Grade { get; set; }
+        
+        // Custom ratio support
+        public bool CustomRatio { get; set; } = false;
+        public int MultipleChoicePercentage { get; set; } = 70;
     }
 
     public class ExamMatrixDto
@@ -93,6 +97,14 @@ namespace BE_Phygens.Dto
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public List<AnswerChoiceResponseDto> AnswerChoices { get; set; } = new(); // renamed
+        
+        // Essay-specific properties
+        public int? MinWords { get; set; }
+        public int? MaxWords { get; set; }
+        public string? EssayStyle { get; set; }
+        public List<string>? KeyPoints { get; set; }
+        public string? GradingRubric { get; set; }
+        public string? SampleAnswer { get; set; }
     }
 
     public class AnswerChoiceResponseDto // renamed from AnswerChoiceDto to avoid conflict
