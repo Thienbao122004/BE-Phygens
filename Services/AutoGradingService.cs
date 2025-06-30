@@ -344,9 +344,9 @@ namespace BE_Phygens.Services
 
                 if (question?.QuestionType?.ToLower() == "essay")
                 {
-                    // Với câu hỏi tự luận, truyền studentTextAnswer làm studentChoiceId
+                    // Với câu hỏi tự luận, xử lý riêng biệt
                     var essayContent = answer.StudentTextAnswer ?? "";
-                    result = await GradeSingleQuestionAsync(answer.QuestionId, essayContent, studentUserId);
+                    result = await GradeEssayQuestionAsync(answer.QuestionId, essayContent, studentUserId);
                 }
                 else
                 {
@@ -390,11 +390,11 @@ namespace BE_Phygens.Services
             }
 
             // Cập nhật thông tin attempt
-            attempt.TotalScore = totalPoints;
-            attempt.MaxScore = exam.ExamQuestions.Count;
+            var normalizedScore = (totalPoints / exam.ExamQuestions.Count) * 10;
+            attempt.TotalScore = Math.Round(normalizedScore, 2);
+            attempt.MaxScore = 10;
             await _context.SaveChangesAsync();
 
-            // Tạo kết quả chi tiết
             var percentageScore = (double)(totalPoints / exam.ExamQuestions.Count * 100);
             var examResult = new ExamGradingResult
             {
@@ -406,7 +406,7 @@ namespace BE_Phygens.Services
                 CorrectAnswers = correctAnswers,
                 IncorrectAnswers = exam.ExamQuestions.Count - correctAnswers,
                 TotalPointsEarned = (double)totalPoints,
-                MaxPossiblePoints = exam.ExamQuestions.Count,
+                MaxPossiblePoints = exam.ExamQuestions.Count, 
                 PercentageScore = percentageScore,
                 Grade = GetGrade(percentageScore),
                 CompletedAt = DateTime.UtcNow,
@@ -945,6 +945,183 @@ namespace BE_Phygens.Services
         {
             // Đề xuất tài liệu học tập phù hợp
             return "Xem lại chương 3 - Động lực học chất điểm và các bài tập tương tự.";
+        }
+
+        public async Task<QuestionGradingResult> GradeEssayQuestionAsync(string questionId, string studentTextAnswer, string? studentUserId)
+        {
+            try
+            {
+                // Lấy thông tin câu hỏi essay
+                var question = await _context.Questions
+                    .Include(q => q.Topic)
+                    .FirstOrDefaultAsync(q => q.QuestionId == questionId);
+
+                if (question == null)
+                {
+                    throw new ArgumentException("Không tìm thấy câu hỏi");
+                }
+
+                if (question.QuestionType?.ToLower() != "essay")
+                {
+                    throw new ArgumentException("Câu hỏi không phải dạng tự luận");
+                }
+
+                // Lấy thông tin từ AiGenerationMetadata nếu có
+                var essayProperties = !string.IsNullOrEmpty(question.AiGenerationMetadata)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(question.AiGenerationMetadata)
+                    : new Dictionary<string, object>();
+
+                var sampleAnswer = question.Explanation ?? "";
+                var maxPoints = 1.0;
+
+                // Cố gắng lấy sample answer và max points từ metadata
+                if (essayProperties.ContainsKey("sampleAnswer"))
+                {
+                    sampleAnswer = essayProperties["sampleAnswer"].ToString();
+                }
+                if (essayProperties.ContainsKey("maxPoints") && double.TryParse(essayProperties["maxPoints"].ToString(), out double points))
+                {
+                    maxPoints = points;
+                }
+
+                // Phân tích cơ bản nội dung essay
+                var wordCount = CountWords(studentTextAnswer);
+                var minWords = essayProperties.ContainsKey("minWords") && int.TryParse(essayProperties["minWords"].ToString(), out int min) ? min : 50;
+                var maxWords = essayProperties.ContainsKey("maxWords") && int.TryParse(essayProperties["maxWords"].ToString(), out int max) ? max : 500;
+
+                // Tính điểm cơ bản dựa trên độ dài và từ khóa
+                double pointsEarned = 0;
+                var feedback = "";
+
+                if (string.IsNullOrWhiteSpace(studentTextAnswer))
+                {
+                    feedback = "Chưa có câu trả lời";
+                }
+                else if (wordCount < minWords)
+                {
+                    pointsEarned = maxPoints * 0.3; // 30% điểm nếu quá ngắn
+                    feedback = $"Câu trả lời quá ngắn ({wordCount} từ, cần tối thiểu {minWords} từ)";
+                }
+                else if (wordCount > maxWords)
+                {
+                    pointsEarned = maxPoints * 0.7; // 70% điểm nếu quá dài
+                    feedback = $"Câu trả lời quá dài ({wordCount} từ, tối đa {maxWords} từ)";
+                }
+                else
+                {
+                    // Đánh giá cơ bản dựa trên từ khóa vật lý
+                    var physicsKeywords = new[] { "lực", "gia tốc", "vận tốc", "động lượng", "năng lượng", "công suất", "điện", "từ trường", "sóng", "nhiệt" };
+                    var foundKeywords = physicsKeywords.Count(keyword => studentTextAnswer.ToLower().Contains(keyword));
+
+                    pointsEarned = Math.Min(maxPoints, maxPoints * (0.5 + (foundKeywords * 0.1))); // Base 50% + 10% per keyword
+                    feedback = $"Câu trả lời có độ dài phù hợp ({wordCount} từ). Tìm thấy {foundKeywords} thuật ngữ vật lý quan trọng.";
+                }
+
+                // Lấy explanation từ database nếu có
+                var explanationFromDb = await _context.Explanations
+                    .FirstOrDefaultAsync(e => e.QuestionId == questionId);
+
+                var explanationText = explanationFromDb?.ExplanationText 
+                    ?? question.Explanation 
+                    ?? (!string.IsNullOrEmpty(sampleAnswer) ? $"Gợi ý: {sampleAnswer}" : "Câu hỏi tự luận cần đánh giá chi tiết");
+
+                var correctAnswerText = !string.IsNullOrEmpty(sampleAnswer) 
+                    ? sampleAnswer 
+                    : (explanationFromDb?.ExplanationText ?? question.Explanation ?? "Câu hỏi tự luận - xem hướng dẫn chi tiết");
+
+                var result = new QuestionGradingResult
+                {
+                    QuestionId = questionId,
+                    CorrectChoiceId = "", // Essay không có choice ID
+                    CorrectChoiceLabel = "", // Essay không có choice label  
+                    CorrectChoiceText = correctAnswerText,
+                    StudentChoiceId = "", // Essay không có choice ID
+                    StudentChoiceLabel = "", // Essay không có choice label
+                    StudentChoiceText = studentTextAnswer ?? "", // Đảm bảo không null
+                    IsCorrect = pointsEarned >= (maxPoints * 0.6), // Đạt 60% trở lên coi là đúng
+                    PointsEarned = pointsEarned,
+                    MaxPoints = maxPoints,
+                    Feedback = feedback ?? "",
+                    Explanation = explanationText,
+                    DifficultyLevel = question.DifficultyLevel ?? "medium",
+                    QuestionType = "essay",
+                    GradedAt = DateTime.UtcNow
+                };
+
+                // Debug: Log kết quả essay grading
+                _logger.LogInformation("Debug Essay Grading - Question {QuestionId}: StudentAnswer={StudentAnswer}, CorrectAnswer={CorrectAnswer}, Points={Points}/{MaxPoints}", 
+                    questionId, 
+                    studentTextAnswer?.Substring(0, Math.Min(50, studentTextAnswer?.Length ?? 0)) + "...",
+                    correctAnswerText?.Substring(0, Math.Min(50, correctAnswerText.Length)) + "...",
+                    pointsEarned, maxPoints);
+
+                // Lưu câu trả lời essay vào database
+                if (!string.IsNullOrEmpty(studentUserId))
+                {
+                    var examQuestion = await _context.ExamQuestions
+                        .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
+
+                    if (examQuestion != null)
+                    {
+                        var attempt = new StudentAttempt
+                        {
+                            AttemptId = Guid.NewGuid().ToString(),
+                            UserId = studentUserId,
+                            ExamId = examQuestion.ExamId,
+                            StartTime = DateTime.UtcNow,
+                            EndTime = DateTime.UtcNow,
+                            TotalScore = Convert.ToDecimal(pointsEarned),
+                            MaxScore = (decimal)maxPoints,
+                            Status = "completed"
+                        };
+                        _context.StudentAttempts.Add(attempt);
+
+                        var studentAnswer = new StudentAnswer
+                        {
+                            AnswerId = Guid.NewGuid().ToString(),
+                            AttemptId = attempt.AttemptId,
+                            QuestionId = questionId,
+                            SelectedChoiceId = null,
+                            StudentTextAnswer = studentTextAnswer,
+                            IsCorrect = result.IsCorrect,
+                            PointsEarned = Convert.ToDecimal(pointsEarned),
+                            AnsweredAt = DateTime.UtcNow
+                        };
+
+                        _context.StudentAnswers.Add(studentAnswer);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi chấm điểm câu hỏi tự luận {QuestionId}", questionId);
+
+                // Return fallback result
+                return new QuestionGradingResult
+                {
+                    QuestionId = questionId,
+                    CorrectChoiceText = "Lỗi hệ thống",
+                    StudentChoiceText = studentTextAnswer,
+
+                    IsCorrect = false,
+                    PointsEarned = 0,
+                    MaxPoints = 1.0,
+                    Feedback = "Có lỗi xảy ra khi chấm điểm",
+                    QuestionType = "essay",
+                    GradedAt = DateTime.UtcNow
+                };
+            }
+        }
+
+        private int CountWords(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
+
+            return text.Trim().Split(new char[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
         }
     }
 } 

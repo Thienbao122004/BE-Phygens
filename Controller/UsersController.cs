@@ -160,60 +160,6 @@ namespace BE_Phygens.Controllers
         }
 
         /// <summary>
-        /// Get current user profile
-        /// </summary>
-        /// <returns>Current user profile with additional statistics</returns>
-        [HttpGet("me")]
-        [Authorize]
-        [ProducesResponseType(typeof(ApiResponse<UserProfileResponseDto>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ApiResponse<UserProfileResponseDto>>> GetCurrentUser()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
-                }
-
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .Include(u => u.CreatedExams)
-                    .Include(u => u.CreatedQuestions)
-                    .Include(u => u.StudentAttempts)
-                    .FirstOrDefaultAsync(u => u.UserId == userId);
-
-                if (user == null)
-                {
-                    return NotFound(ApiResponse<object>.ErrorResult("User not found"));
-                }
-
-                var userProfile = new UserProfileResponseDto
-                {
-                    Id = user.UserId,
-                    Username = user.Username,
-                    Email = user.Email,
-                    FullName = user.FullName,
-                    Role = user.Role,
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt,
-                    CreatedExamsCount = user.CreatedExams.Count,
-                    CreatedQuestionsCount = user.CreatedQuestions.Count,
-                    AttemptsCount = user.StudentAttempts.Count
-                };
-
-                return Ok(ApiResponse<UserProfileResponseDto>.SuccessResult(
-                    userProfile, "Profile retrieved successfully"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred while retrieving profile", new List<string> { ex.Message }));
-            }
-        }
-
-        /// <summary>
         /// Create a new user (Admin only)
         /// </summary>
         /// <param name="request">User creation data</param>
@@ -286,56 +232,44 @@ namespace BE_Phygens.Controllers
         }
 
         /// <summary>
-        /// Update user information
+        /// Update current user profile
         /// </summary>
-        /// <param name="id">User ID</param>
         /// <param name="request">Update data</param>
-        /// <returns>Updated user</returns>
-        [HttpPut("{id}")]
+        /// <returns>Updated user profile</returns>
+        [HttpPut("me")]
         [Authorize]
         [ProducesResponseType(typeof(ApiResponse<UserResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
-        public async Task<ActionResult<ApiResponse<UserResponseDto>>> UpdateUser(string id, UpdateUserRequestDto request)
+        public async Task<ActionResult<ApiResponse<UserResponseDto>>> UpdateCurrentUser(UpdateUserRequestDto request)
         {
             try
             {
-                var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
-
-                // Users can only update their own profile unless they're admin
-                if (currentUserId != id && currentUserRole != "admin")
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
                 {
-                    return Forbid();
+                    return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
                 }
 
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == id);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
                 if (user == null)
                 {
                     return NotFound(ApiResponse<object>.ErrorResult("User not found"));
                 }
 
-                // Update only provided fields
                 if (!string.IsNullOrEmpty(request.FullName))
                     user.FullName = request.FullName;
 
                 if (!string.IsNullOrEmpty(request.Email))
                 {
-                    // Check if email is already taken by another user
                     var emailExists = await _context.Users
-                        .AnyAsync(u => u.Email == request.Email && u.UserId != id);
+                        .AnyAsync(u => u.Email == request.Email && u.UserId != userId);
                     if (emailExists)
                     {
                         return BadRequest(ApiResponse<object>.ErrorResult("Email already exists"));
                     }
                     user.Email = request.Email;
                 }
-
-                // Only admin can change active status
-                if (request.IsActive.HasValue && currentUserRole == "admin")
-                    user.IsActive = request.IsActive.Value;
 
                 await _context.SaveChangesAsync();
 
@@ -360,60 +294,6 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Change user password
-        /// </summary>
-        /// <param name="request">Password change data</param>
-        /// <returns>Success message</returns>
-        [HttpPut("me/password")]
-        [Authorize]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ApiResponse<object>>> ChangePassword(ChangePasswordRequestDto request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    var errors = ModelState
-                        .SelectMany(x => x.Value!.Errors)
-                        .Select(x => x.ErrorMessage)
-                        .ToList();
-                    return BadRequest(ApiResponse<object>.ErrorResult("Validation failed", errors));
-                }
-
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
-                }
-
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
-                if (user == null)
-                {
-                    return NotFound(ApiResponse<object>.ErrorResult("User not found"));
-                }
-
-                // Verify current password
-                var currentPasswordHash = HashPassword(request.CurrentPassword);
-                if (user.PasswordHash != currentPasswordHash)
-                {
-                    return BadRequest(ApiResponse<object>.ErrorResult("Current password is incorrect"));
-                }
-
-                // Update password
-                user.PasswordHash = HashPassword(request.NewPassword);
-                await _context.SaveChangesAsync();
-
-                return Ok(ApiResponse<object>.SuccessResult(null, "Password changed successfully"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred while changing password", new List<string> { ex.Message }));
-            }
-        }
 
         /// <summary>
         /// Delete user (Admin only)

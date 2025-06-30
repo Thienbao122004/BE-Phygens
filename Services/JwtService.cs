@@ -5,6 +5,7 @@ using System.Text;
 using BE_Phygens.Models;
 using BE_Phygens.Dto;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace BE_Phygens.Services
 {
@@ -13,64 +14,39 @@ namespace BE_Phygens.Services
         private readonly IConfiguration _configuration;
         private readonly PhygensContext _context;
         private readonly string _secretKey;
-        private readonly string? _issuer;
-        private readonly string? _audience;
-        private readonly int _tokenExpirationHours;
+        private readonly string _accessTokenSecret;
+        private readonly string _refreshTokenSecret;
+        private readonly int _accessTokenExpirationMinutes;
+        private readonly int _refreshTokenExpirationDays;
+        private readonly string _issuer;
+        private readonly string _audience;
 
         public JwtService(IConfiguration configuration, PhygensContext context)
         {
             _configuration = configuration;
             _context = context;
             
-            // Cùng logic như Programs.cs
-            _secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
-                        Environment.GetEnvironmentVariable("JWT_KEY") ?? 
-                        _configuration["Jwt:SecretKey"] ??
-                        throw new InvalidOperationException("JWT secret key is not configured");
+            _secretKey = _configuration["Jwt:SecretKey"] ?? throw new ArgumentNullException("Jwt:SecretKey");
+            _accessTokenSecret = _configuration["Jwt:AccessTokenSecret"] ?? _secretKey; // Fallback to SecretKey if not set
+            _refreshTokenSecret = _configuration["Jwt:RefreshTokenSecret"] ?? _secretKey; // Fallback to SecretKey if not set
             
-            _issuer = Environment.GetEnvironmentVariable("JWT_ISSUER");
-            _audience = Environment.GetEnvironmentVariable("JWT_AUDIENCE");
-            _tokenExpirationHours = 24 * 7; // 7 days
+            _accessTokenExpirationMinutes = _configuration.GetValue<int>("Jwt:AccessTokenExpirationMinutes", 15);
+            _refreshTokenExpirationDays = _configuration.GetValue<int>("Jwt:RefreshTokenExpirationDays", 7);
+            
+            _issuer = _configuration["Jwt:Issuer"] ?? "BE_Phygens";
+            _audience = _configuration["Jwt:Audience"] ?? "BE_Phygens_Client";
         }
 
         public async Task<LoginResponseDto> GenerateTokenAsync(User user)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.UTF8.GetBytes(_secretKey);
-
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.UserId),
-                new(ClaimTypes.Email, user.Email),
-                new(ClaimTypes.Name, user.FullName),
-                new(ClaimTypes.Role, user.Role),
-                new("username", user.Username),
-                new("full_name", user.FullName),
-                new("is_active", user.IsActive.ToString()),
-                new("jti", Guid.NewGuid().ToString()), // Token ID for revocation
-                new("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
-            };
-
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(_tokenExpirationHours),
-                Issuer = _issuer,
-                Audience = _audience,
-                SigningCredentials = new SigningCredentials(
-                    new SymmetricSecurityKey(key), 
-                    SecurityAlgorithms.HmacSha256Signature
-                )
-            };
-
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
+            var (accessToken, refreshToken) = GenerateTokens(user);
 
             return new LoginResponseDto
             {
-                AccessToken = tokenString,
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
                 TokenType = "Bearer",
-                ExpiresIn = _tokenExpirationHours * 3600, // Convert to seconds
+                ExpiresIn = _accessTokenExpirationMinutes * 60, // Convert to seconds
                 User = new UserResponseDto
                 {
                     Id = user.UserId,
@@ -133,6 +109,86 @@ namespace BE_Phygens.Services
             // Implement token revocation logic if needed
             // For now, we rely on token expiration
             await Task.CompletedTask;
+        }
+
+        public string GenerateAccessToken(User user)
+        {
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserId),
+                new Claim(ClaimTypes.Name, user.Username),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role)
+            };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_accessTokenSecret));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: _issuer,
+                audience: _audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(_accessTokenExpirationMinutes),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public (string accessToken, string refreshToken) GenerateTokens(User user)
+        {
+            var accessToken = GenerateAccessToken(user);
+            
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserId),
+                new Claim(ClaimTypes.Name, user.Username)
+            };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_refreshTokenSecret));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var refreshToken = new JwtSecurityToken(
+                issuer: _issuer,
+                audience: _audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddDays(_refreshTokenExpirationDays),
+                signingCredentials: credentials
+            );
+
+            return (accessToken, new JwtSecurityTokenHandler().WriteToken(refreshToken));
+        }
+
+        public ClaimsPrincipal? ValidateRefreshToken(string refreshToken)
+        {
+            var tokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _issuer,
+                ValidAudience = _audience,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_refreshTokenSecret))
+            };
+
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var principal = tokenHandler.ValidateToken(refreshToken, tokenValidationParameters, out SecurityToken securityToken);
+
+                if (securityToken is not JwtSecurityToken jwtSecurityToken || 
+                    !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    return null;
+                }
+
+                return principal;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 } 

@@ -46,7 +46,6 @@ namespace BE_Phygens.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResult("Validation failed", errors));
                 }
 
-                // Find user by username
                 var user = await _context.Users
                     .AsNoTracking()
                     .FirstOrDefaultAsync(u => u.Username == request.Username);
@@ -56,7 +55,6 @@ namespace BE_Phygens.Controllers
                     return Unauthorized(ApiResponse<object>.ErrorResult("Invalid username or password"));
                 }
 
-                // Verify password - check both plain text and hash for backward compatibility
                 var hashedPassword = HashPassword(request.Password);
                 bool passwordValid = user.PasswordHash == hashedPassword || user.PasswordHash == request.Password;
                 
@@ -65,13 +63,11 @@ namespace BE_Phygens.Controllers
                     return Unauthorized(ApiResponse<object>.ErrorResult("Invalid username or password"));
                 }
 
-                // Check if user is active
                 if (!user.IsActive)
                 {
                     return Unauthorized(ApiResponse<object>.ErrorResult("Account has been deactivated"));
                 }
 
-                // Generate JWT token
                 var loginResponse = await _jwtService.GenerateTokenAsync(user);
 
                 return Ok(ApiResponse<LoginResponseDto>.SuccessResult(
@@ -105,7 +101,6 @@ namespace BE_Phygens.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResult("Validation failed", errors));
                 }
 
-                // Check if username or email already exists
                 var existingUser = await _context.Users
                     .AsNoTracking()
                     .FirstOrDefaultAsync(u => u.Username == request.Username || u.Email == request.Email);
@@ -123,7 +118,6 @@ namespace BE_Phygens.Controllers
                     return BadRequest(ApiResponse<object>.ErrorResult("Invalid role. Only 'student' are allowed"));
                 }
 
-                // Hash password
                 var hashedPassword = HashPassword(request.Password);
 
                 var user = new User
@@ -141,7 +135,6 @@ namespace BE_Phygens.Controllers
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
 
-                // Generate JWT token for the new user
                 var loginResponse = await _jwtService.GenerateTokenAsync(user);
 
                 return CreatedAtAction(nameof(Login), 
@@ -173,7 +166,6 @@ namespace BE_Phygens.Controllers
                     return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
                 }
 
-                // Get token from Authorization header
                 var token = Request.Headers["Authorization"]
                     .FirstOrDefault()?.Split(" ").Last();
 
@@ -192,57 +184,9 @@ namespace BE_Phygens.Controllers
         }
 
         /// <summary>
-        /// Verify token validity
+        /// Change user password
         /// </summary>
-        /// <returns>Token status and user information</returns>
-        [HttpGet("verify")]
-        [Authorize]
-        [ProducesResponseType(typeof(ApiResponse<UserResponseDto>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ApiResponse<UserResponseDto>>> VerifyToken()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
-                }
-
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.UserId == userId);
-
-                if (user == null || !user.IsActive)
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("User not found or inactive"));
-                }
-
-                var userDto = new UserResponseDto
-                {
-                    Id = user.UserId,
-                    Username = user.Username,
-                    Email = user.Email,
-                    FullName = user.FullName,
-                    Role = user.Role,
-                    IsActive = user.IsActive,
-                    CreatedAt = user.CreatedAt
-                };
-
-                return Ok(ApiResponse<UserResponseDto>.SuccessResult(
-                    userDto, "Token is valid"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred during token verification", new List<string> { ex.Message }));
-            }
-        }
-
-        /// <summary>
-        /// Change password
-        /// </summary>
-        /// <param name="request">Password change data</param>
+        /// <param name="request">Password change request</param>
         /// <returns>Success message</returns>
         [HttpPut("password")]
         [Authorize]
@@ -274,14 +218,12 @@ namespace BE_Phygens.Controllers
                     return NotFound(ApiResponse<object>.ErrorResult("User not found"));
                 }
 
-                // Verify current password
                 var currentPasswordHash = HashPassword(request.CurrentPassword);
                 if (user.PasswordHash != currentPasswordHash)
                 {
                     return BadRequest(ApiResponse<object>.ErrorResult("Current password is incorrect"));
                 }
 
-                // Update password
                 user.PasswordHash = HashPassword(request.NewPassword);
                 await _context.SaveChangesAsync();
 
@@ -294,219 +236,12 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Check user role and permissions
-        /// </summary>
-        /// <returns>User role information</returns>
-        [HttpGet("role")]
-        [Authorize]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-        public async Task<ActionResult<ApiResponse<object>>> CheckRole()
-        {
-            try
-            {
-                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("Invalid token"));
-                }
-
-                var user = await _context.Users
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.UserId == userId);
-
-                if (user == null)
-                {
-                    return Unauthorized(ApiResponse<object>.ErrorResult("User not found"));
-                }
-
-                return Ok(ApiResponse<object>.SuccessResult(new
-                {
-                    userId = user.UserId,
-                    username = user.Username,
-                    email = user.Email,
-                    fullName = user.FullName,
-                    role = user.Role,
-                    isAdmin = user.Role == "admin",
-                    permissions = GetUserPermissions(user.Role)
-                }, "Role information retrieved successfully"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred while checking role", new List<string> { ex.Message }));
-            }
-        }
-
-        /// <summary>
-        /// Admin only endpoint - Get all users (Admin required)
-        /// </summary>
-        [HttpGet("admin/users")]
-        [Authorize(Roles = "admin")]
-        [ProducesResponseType(typeof(ApiResponse<List<UserResponseDto>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
-        public async Task<ActionResult<ApiResponse<List<UserResponseDto>>>> GetAllUsersAdmin()
-        {
-            try
-            {
-                var users = await _context.Users
-                    .AsNoTracking()
-                    .Where(u => u.IsActive)
-                    .Select(u => new UserResponseDto
-                    {
-                        Id = u.UserId,
-                        Username = u.Username,
-                        Email = u.Email,
-                        FullName = u.FullName,
-                        Role = u.Role,
-                        IsActive = u.IsActive,
-                        CreatedAt = u.CreatedAt
-                    })
-                    .ToListAsync();
-
-                return Ok(ApiResponse<List<UserResponseDto>>.SuccessResult(
-                    users, "Users retrieved successfully"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "An error occurred while retrieving users", new List<string> { ex.Message }));
-            }
-        }
-
-        private static List<string> GetUserPermissions(string role)
-        {
-            return role.ToLower() switch
-            {
-                "admin" => new List<string> 
-                { 
-                    "view_all_users", 
-                    "manage_users", 
-                    "manage_exams", 
-                    "view_analytics", 
-                    "manage_questions",
-                    "view_reports"
-                },
-                "student" => new List<string> 
-                { 
-                    "take_exams", 
-                    "view_own_results", 
-                    "view_own_history"
-                },
-                _ => new List<string>()
-            };
-        }
-
-        /// <summary>
-        /// Debug endpoint to create admin user (Remove in production)
-        /// </summary>
-    //     [HttpPost("debug/create-admin")]
-    //     public async Task<ActionResult<ApiResponse<object>>> CreateAdminUser()
-    //     {
-    //         try
-    //         {
-    //             // Check if admin already exists
-    //             var existingAdmin = await _context.Users
-    //                 .FirstOrDefaultAsync(u => u.Role == "admin");
-
-    //             if (existingAdmin != null)
-    //             {
-    //                 return BadRequest(ApiResponse<object>.ErrorResult("Admin user already exists"));
-    //             }
-
-    //             var adminUser = new User
-    //             {
-    //                 UserId = Guid.NewGuid().ToString(),
-    //                 Username = "admin",
-    //                 Email = "admin@phygens.com",
-    //                 FullName = "System Administrator",
-    //                 Role = "admin",
-    //                 PasswordHash = HashPassword("admin123"), // Default password
-    //                 CreatedAt = DateTime.UtcNow,
-    //                 IsActive = true
-    //             };
-
-    //             _context.Users.Add(adminUser);
-    //             await _context.SaveChangesAsync();
-
-    //             return Ok(ApiResponse<object>.SuccessResult(new
-    //             {
-    //                 message = "Admin user created successfully",
-    //                 username = "admin",
-    //                 password = "admin123",
-    //                 note = "Please change the password after first login"
-    //             }, "Admin user created"));
-    //         }
-    //         catch (Exception ex)
-    //         {
-    //             return StatusCode(500, ApiResponse<object>.ErrorResult(
-    //                 "An error occurred while creating admin user", new List<string> { ex.Message }));
-    //         }
-    //     }
-
         private static string HashPassword(string password)
         {
-            // Simple MD5 hash - should use bcrypt or Argon2 in production
             using var md5 = MD5.Create();
             var inputBytes = Encoding.UTF8.GetBytes(password);
             var hashBytes = md5.ComputeHash(inputBytes);
             return Convert.ToHexString(hashBytes).ToLower();
         }
-
-        /// <summary>
-        /// Debug: Check password hash for testing
-        /// </summary>
-        [HttpPost("debug/hash")]
-        public ActionResult<ApiResponse<object>> DebugHashPassword([FromBody] string password)
-        {
-            try
-            {
-                var hashed = HashPassword(password);
-                return Ok(ApiResponse<object>.SuccessResult(new 
-                { 
-                    original = password,
-                    md5_hash = hashed 
-                }, "Password hash generated"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "Error generating hash", new List<string> { ex.Message }));
-            }
-        }
-
-    //     /// <summary>
-    //     /// Debug: Check user in database
-    //     /// </summary>
-    //     [HttpGet("debug/user/{username}")]
-    //     public async Task<ActionResult<ApiResponse<object>>> DebugUser(string username)
-    //     {
-    //         try
-    //         {
-    //             var user = await _context.Users
-    //                 .AsNoTracking()
-    //                 .FirstOrDefaultAsync(u => u.Username == username);
-
-    //             if (user == null)
-    //             {
-    //                 return NotFound(ApiResponse<object>.ErrorResult("User not found"));
-    //             }
-
-    //             return Ok(ApiResponse<object>.SuccessResult(new 
-    //             { 
-    //                 username = user.Username,
-    //                 email = user.Email,
-    //                 password_hash = user.PasswordHash,
-    //                 is_active = user.IsActive,
-    //                 role = user.Role
-    //             }, "User found"));
-    //         }
-    //         catch (Exception ex)
-    //         {
-    //             return StatusCode(500, ApiResponse<object>.ErrorResult(
-    //                 "Error checking user", new List<string> { ex.Message }));
-    //         }
-    //     }
     }
 } 

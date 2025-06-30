@@ -62,9 +62,10 @@ namespace BE_Phygens.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting dashboard data");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    error = "Internal server error",
+                    message = ex.Message
                 });
             }
         }
@@ -121,81 +122,15 @@ namespace BE_Phygens.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting recent activities");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    error = "Internal server error",
+                    message = ex.Message
                 });
             }
         }
 
         // GET: analytics/exams
-        [HttpGet("filtered-exams")]
-        public async Task<IActionResult> GetFilteredExams(
-            [FromQuery] int? grade = null,
-            [FromQuery] string? topic = null,
-            [FromQuery] string? difficulty = null,
-            [FromQuery] int limit = 20)
-        {
-            try
-            {
-                var query = _context.Exams.AsQueryable();
-
-                // Apply filters based on parameters
-                if (grade.HasValue)
-                {
-                    // Filter by exams that contain chapters of specific grade
-                    query = query.Where(e => _context.ExamQuestions
-                        .Include(eq => eq.Question)
-                        .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
-                        .Join(_context.Chapters, 
-                            eq => eq.Question.ChapterId, 
-                            c => c.ChapterId, 
-                            (eq, c) => c.Grade)
-                        .Any(g => g == grade));
-                }
-
-                if (!string.IsNullOrEmpty(topic))
-                {
-                    query = query.Where(e => e.ExamName.Contains(topic) || e.Description.Contains(topic));
-                }
-
-                if (!string.IsNullOrEmpty(difficulty))
-                {
-                    // Filter by exam difficulty based on questions
-                    query = query.Where(e => _context.ExamQuestions
-                        .Include(eq => eq.Question)
-                        .Where(eq => eq.ExamId == e.ExamId)
-                        .Any(eq => eq.Question.DifficultyLevel == difficulty));
-                }
-
-                var exams = await query
-                    .OrderByDescending(e => e.CreatedAt)
-                    .Take(limit)
-                    .Select(e => new
-                    {
-                        examId = e.ExamId,
-                        examName = e.ExamName,
-                        description = e.Description,
-                        examType = e.ExamType,
-                        duration = e.DurationMinutes ?? 45,
-                        createdAt = e.CreatedAt,
-                        createdBy = e.CreatedBy,
-                        isPublished = e.IsPublished
-                    })
-                    .ToListAsync();
-
-                return Ok(exams);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting filtered exams");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
-                });
-            }
-        }
-
         [HttpGet("exam-stats")]
         public async Task<ActionResult<ApiResponse<ExamStatsDto>>> GetExamStats()
         {
@@ -232,102 +167,12 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        [HttpGet("sample-exams")]
-        public async Task<ActionResult<ApiResponse<List<SampleExamDto>>>> GetSampleExams(
-            [FromQuery] int? grade = null,
-            [FromQuery] string? subject = null,
-            [FromQuery] string? difficulty = null,
-            [FromQuery] int limit = 10)
-        {
-            try
-            {
-                var query = _context.Exams.AsQueryable();
 
-                // Filter by published exams only for sample exams
-                query = query.Where(e => e.IsPublished);
-
-                // Apply grade filter
-                if (grade.HasValue)
-                {
-                    query = query.Where(e => _context.ExamQuestions
-                        .Include(eq => eq.Question)
-                        .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
-                        .Join(_context.Chapters, 
-                            eq => eq.Question.ChapterId, 
-                            c => c.ChapterId, 
-                            (eq, c) => c.Grade)
-                        .Any(g => g == grade));
-                }
-
-                // Apply subject filter (search in exam name and description)
-                if (!string.IsNullOrEmpty(subject))
-                {
-                    query = query.Where(e => e.ExamName.Contains(subject) || 
-                                           e.Description.Contains(subject) ||
-                                           e.ExamType.Contains(subject));
-                }
-
-                // Apply difficulty filter
-                if (!string.IsNullOrEmpty(difficulty))
-                {
-                    query = query.Where(e => _context.ExamQuestions
-                        .Include(eq => eq.Question)
-                        .Where(eq => eq.ExamId == e.ExamId)
-                        .Any(eq => eq.Question.DifficultyLevel == difficulty));
-                }
-
-                var sampleExams = await query
-                    .OrderByDescending(e => e.CreatedAt)
-                    .Take(limit)
-                    .Select(e => new SampleExamDto
-                    {
-                        ExamId = e.ExamId,
-                        ExamName = e.ExamName,
-                        Description = e.Description,
-                        ExamType = e.ExamType,
-                        Duration = e.DurationMinutes ?? 45,
-                        QuestionCount = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId),
-                        Difficulty = _context.ExamQuestions
-                            .Include(eq => eq.Question)
-                            .Where(eq => eq.ExamId == e.ExamId)
-                            .Select(eq => eq.Question.DifficultyLevel)
-                            .FirstOrDefault() ?? "medium",
-                        Grade = _context.ExamQuestions
-                            .Include(eq => eq.Question)
-                            .Where(eq => eq.ExamId == e.ExamId && eq.Question.ChapterId.HasValue)
-                            .Join(_context.Chapters, 
-                                eq => eq.Question.ChapterId, 
-                                c => c.ChapterId, 
-                                (eq, c) => c.Grade)
-                            .FirstOrDefault(),
-                        Subject = "Vật lý", 
-                        CreatedAt = e.CreatedAt,
-                        IsPopular = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId) >= 10
-                    })
-                    .ToListAsync();
-
-                return Ok(new ApiResponse<List<SampleExamDto>>
-                {
-                    Success = true,
-                    Message = $"Retrieved {sampleExams.Count} sample exams",
-                    Data = sampleExams
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting sample exams");
-                return StatusCode(500, new ApiResponse<List<SampleExamDto>>
-                {
-                    Success = false,
-                    Message = $"Server error: {ex.Message}"
-                });
-            }
-        }
 
         private string GetSubjectFromExamName(string examName)
         {
             if (string.IsNullOrEmpty(examName)) return "Vật lý";
-            
+
             examName = examName.ToLower();
             if (examName.Contains("cơ học") || examName.Contains("co hoc")) return "Cơ học";
             if (examName.Contains("điện học") || examName.Contains("dien hoc")) return "Điện học";
@@ -335,7 +180,7 @@ namespace BE_Phygens.Controllers
             if (examName.Contains("nhiệt học") || examName.Contains("nhiet hoc")) return "Nhiệt học";
             if (examName.Contains("sóng") || examName.Contains("song")) return "Sóng";
             if (examName.Contains("hạt nhân") || examName.Contains("hat nhan")) return "Hạt nhân";
-            
+
             return "Vật lý";
         }
 
@@ -563,5 +408,73 @@ namespace BE_Phygens.Controllers
             const int minQuestionsForGoodCoverage = 20;
             return Math.Min((double)questionCount / minQuestionsForGoodCoverage * 100, 100);
         }
+        [HttpGet("sample-exams")]
+        public async Task<ActionResult<ApiResponse<List<SampleExamDto>>>> GetSampleExams(
+            [FromQuery] int? grade = null,
+            [FromQuery] string? subject = null,
+            [FromQuery] string? difficulty = null,
+            [FromQuery] int limit = 10)
+        {
+            try
+            {
+                var query = _context.Exams.AsQueryable();
+                if (grade.HasValue)
+                {
+                    query = query.Where(e => _context.ExamQuestions.Any(eq => eq.ExamId == e.ExamId));
+                    _logger.LogInformation($"After basic filter count: {await query.CountAsync()}");
+                }
+
+                if (!string.IsNullOrEmpty(subject))
+                {
+                    query = query.Where(e => e.ExamName.Contains(subject) ||
+                                           e.Description.Contains(subject) ||
+                                           e.ExamType.Contains(subject));
+                    _logger.LogInformation($"After subject filter count: {await query.CountAsync()}");
+                }
+
+                if (!string.IsNullOrEmpty(difficulty))
+                {
+                    query = query.Where(e => _context.ExamQuestions.Any(eq => eq.ExamId == e.ExamId));
+                    _logger.LogInformation($"After basic difficulty filter count: {await query.CountAsync()}");
+                }
+
+                var sampleExams = await query
+                    .OrderByDescending(e => e.CreatedAt)
+                    .Take(limit)
+                    .Select(e => new SampleExamDto
+                    {
+                        ExamId = e.ExamId,
+                        ExamName = e.ExamName,
+                        Description = e.Description,
+                        ExamType = e.ExamType,
+                        Duration = e.DurationMinutes ?? 45,
+                        QuestionCount = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId),
+                        Difficulty = "medium", // Default value for testing
+                        Grade = 10, // Default value for testing
+                        Subject = "Vật lý",
+                        CreatedAt = e.CreatedAt,
+                        IsPopular = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId) >= 10
+                    })
+                    .ToListAsync();
+
+                _logger.LogInformation($"Final sample exams count: {sampleExams.Count}");
+
+                return Ok(new ApiResponse<List<SampleExamDto>>
+                {
+                    Success = true,
+                    Message = $"Retrieved {sampleExams.Count} sample exams (debug mode)",
+                    Data = sampleExams
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting sample exams (debug)");
+                return StatusCode(500, new ApiResponse<List<SampleExamDto>>
+                {
+                    Success = false,
+                    Message = $"Server error: {ex.Message}"
+                });
+            }
+        }
     }
-} 
+}
