@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 
 namespace BE_Phygens.Controllers
 {
@@ -686,6 +687,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: exams/history/{userId}
+        [Authorize]
         [HttpGet("history/{userId}")]
         public async Task<IActionResult> GetUserExamHistory(string userId)
         {

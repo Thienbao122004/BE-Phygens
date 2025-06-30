@@ -116,6 +116,9 @@ namespace BE_Phygens.Dto
         [JsonPropertyName("access_token")]
         public string AccessToken { get; set; } = string.Empty;
 
+        [JsonPropertyName("refresh_token")]
+        public string RefreshToken { get; set; } = string.Empty;
+
         [JsonPropertyName("token_type")]
         public string TokenType { get; set; } = "Bearer";
 
@@ -128,8 +131,13 @@ namespace BE_Phygens.Dto
 
     public class RefreshTokenRequestDto
     {
-        [Required(ErrorMessage = "Refresh token is required")]
-        [JsonPropertyName("refresh_token")]
+        [Required]
+        public string RefreshToken { get; set; } = string.Empty;
+    }
+
+    public class TokenResponseDto
+    {
+        public string AccessToken { get; set; } = string.Empty;
         public string RefreshToken { get; set; } = string.Empty;
     }
 } 

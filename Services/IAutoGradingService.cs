@@ -5,6 +5,7 @@ namespace BE_Phygens.Services
     public interface IAutoGradingService
     {
         Task<QuestionGradingResult> GradeSingleQuestionAsync(string questionId, string studentChoiceId, string? studentUserId);
+        Task<QuestionGradingResult> GradeEssayQuestionAsync(string questionId, string studentTextAnswer, string? studentUserId);
         Task<DetailedFeedback> GetDetailedFeedbackAsync(string questionId, string studentChoiceId);
         Task<ExamGradingResult> GradeExamAsync(string examId, List<StudentAnswerSubmission> studentAnswers, string studentUserId);
         Task<ExamGradingResult> GradeExamAttemptAsync(string attemptId);

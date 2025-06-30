@@ -96,6 +96,14 @@ namespace BE_Phygens.Controller
                     request.StudentUserId
                 );
 
+                // Debug: Log thông tin chi tiết về question results
+                _logger.LogInformation("Debug Controller - Exam graded, {QuestionCount} questions processed", result.QuestionResults.Count());
+                foreach (var qr in result.QuestionResults.Take(3)) // Log 3 câu đầu
+                {
+                    _logger.LogInformation("Debug Controller - Question {QuestionId}: Type={Type}, Student={StudentText}, Correct={CorrectText}", 
+                        qr.QuestionId, qr.QuestionType, qr.StudentChoiceText, qr.CorrectChoiceText);
+                }
+
                 return Ok(new
                 {
                     examId = result.ExamId,
@@ -116,12 +124,20 @@ namespace BE_Phygens.Controller
                     questionResults = result.QuestionResults.Select(qr => new
                     {
                         questionId = qr.QuestionId,
+                        correctChoiceId = qr.CorrectChoiceId,
+                        correctChoiceLabel = qr.CorrectChoiceLabel,
+                        correctChoiceText = qr.CorrectChoiceText,
+                        studentChoiceId = qr.StudentChoiceId,
+                        studentChoiceLabel = qr.StudentChoiceLabel,
+                        studentChoiceText = qr.StudentChoiceText,
                         isCorrect = qr.IsCorrect,
                         pointsEarned = qr.PointsEarned,
                         maxPoints = qr.MaxPoints,
                         feedback = qr.Feedback,
+                        explanation = qr.Explanation,
                         difficultyLevel = qr.DifficultyLevel,
-                        questionType = qr.QuestionType
+                        questionType = qr.QuestionType,
+                        gradedAt = qr.GradedAt
                     }),
                     analysis = new
                     {
