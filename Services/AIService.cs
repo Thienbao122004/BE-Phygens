@@ -870,8 +870,8 @@ Trả về theo định dạng JSON chính xác:
         private QuestionDto ParseImprovedQuestion(string content, Question original) => new();
         private QuestionValidationDto ParseValidationResult(string result) => new();
         private List<TopicSuggestionDto> ParseTopicSuggestions(string suggestions) => new();
-        private string CreateMockValidation() => throw new InvalidOperationException("❌ CẤM MOCK VALIDATION!");
-        private List<TopicSuggestionDto> CreateMockTopicSuggestions(Chapter chapter) => throw new InvalidOperationException("❌ CẤM MOCK TOPIC SUGGESTIONS!");
+        private string CreateMockValidation() => throw new InvalidOperationException();
+        private List<TopicSuggestionDto> CreateMockTopicSuggestions(Chapter chapter) => throw new InvalidOperationException();
         private async Task<StudentPerformance> AnalyzeStudentPerformance(string studentId, int chapterId) => new();
         private string DetermineAdaptiveDifficulty(StudentPerformance performance, int questionIndex) => "medium";
         private Dictionary<string, int> CalculateDifficultyDistribution(int totalQuestions, DifficultyDistribution distribution)

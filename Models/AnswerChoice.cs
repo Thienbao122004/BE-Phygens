@@ -28,8 +28,6 @@ namespace BE_Phygens.Models
         [Column("displayorder")]
         public int DisplayOrder { get; set; } = 1;
 
-        [Column("isactive")]
-        public bool IsActive { get; set; } = true;
         // Navigation properties
         [ForeignKey("QuestionId")]
         public virtual Question Question { get; set; } = null!;

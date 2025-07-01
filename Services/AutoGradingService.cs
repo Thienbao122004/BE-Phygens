@@ -389,13 +389,20 @@ namespace BE_Phygens.Services
                 }
             }
 
-            // Cập nhật thông tin attempt
-            var normalizedScore = (totalPoints / exam.ExamQuestions.Count) * 10;
-            attempt.TotalScore = Math.Round(normalizedScore, 2);
+            // Cập nhật thông tin attempt - sử dụng thang điểm tỷ lệ thực tế
+            var percentageScore = (double)(totalPoints / exam.ExamQuestions.Count * 100);
+            var normalizedScore = Math.Max(0.1m, (totalPoints / exam.ExamQuestions.Count) * 10); // Tối thiểu 0.1 điểm nếu có câu đúng
+            if (correctAnswers == 0) normalizedScore = 0; // Chỉ 0 điểm khi không đúng câu nào
+            
+            // Debug: Log chi tiết về tính điểm
+            _logger.LogInformation("🔢 AutoGrading Debug - Exam: {ExamId}, Student: {StudentId}", examId, studentUserId);
+            _logger.LogInformation("📊 Points: {TotalPoints}/{TotalQuestions} = {PercentageScore}%", totalPoints, exam.ExamQuestions.Count, percentageScore);
+            _logger.LogInformation("📈 NormalizedScore: {NormalizedScore}, CorrectAnswers: {CorrectAnswers}", normalizedScore, correctAnswers);
+            
+            attempt.TotalScore = Math.Round(normalizedScore, 1); 
             attempt.MaxScore = 10;
             await _context.SaveChangesAsync();
 
-            var percentageScore = (double)(totalPoints / exam.ExamQuestions.Count * 100);
             var examResult = new ExamGradingResult
             {
                 ExamId = examId,
@@ -405,8 +412,8 @@ namespace BE_Phygens.Services
                 TotalQuestions = exam.ExamQuestions.Count,
                 CorrectAnswers = correctAnswers,
                 IncorrectAnswers = exam.ExamQuestions.Count - correctAnswers,
-                TotalPointsEarned = (double)totalPoints,
-                MaxPossiblePoints = exam.ExamQuestions.Count, 
+                TotalPointsEarned = Math.Round((double)normalizedScore, 1), // Điểm trên thang 10, làm tròn 1 chữ số
+                MaxPossiblePoints = 10, // Thang điểm tối đa là 10 
                 PercentageScore = percentageScore,
                 Grade = GetGrade(percentageScore),
                 CompletedAt = DateTime.UtcNow,
