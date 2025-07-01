@@ -132,7 +132,6 @@ namespace BE_Phygens
             // Register custom services
             builder.Services.AddScoped<IJwtService, JwtService>();
             builder.Services.AddScoped<IAutoGradingService, AutoGradingService>();
-            builder.Services.AddScoped<IEssayGradingService, EssayGradingService>();
             
             // Add HttpClient for AI services
             builder.Services.AddHttpClient();
@@ -155,7 +154,7 @@ namespace BE_Phygens
                 
                 options.AddPolicy("Development", policy =>
                 {
-                    policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "file://")
+                    policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "http://localhost:3000")
                           .AllowAnyMethod()
                           .AllowAnyHeader()
                           .AllowCredentials();
@@ -165,11 +164,11 @@ namespace BE_Phygens
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                 {
+
                     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
                     options.JsonSerializerOptions.WriteIndented = true;
                     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-                    // Thay đổi: Không ignore null, chỉ ignore khi là null thật sự
-                    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
+                    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
                 });
             builder.Services.AddEndpointsApiExplorer();
             
@@ -247,8 +246,15 @@ namespace BE_Phygens
 
             app.UseRouting();
 
-            // Use CORS - Tạm thời dùng AllowAll cho testing
-            app.UseCors("AllowAll");
+            // Use CORS
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseCors("Development");
+            }
+            else
+            {
+                app.UseCors("AllowAll");
+            }
 
             app.UseAuthentication();
             app.UseAuthorization();

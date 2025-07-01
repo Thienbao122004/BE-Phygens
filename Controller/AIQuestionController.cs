@@ -353,11 +353,11 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Get all questions with pagination and filters
-        /// GET: ai-questions
+        /// GET: ai-question
         /// </summary>
         [HttpGet]
         [AllowAnonymous]
-        public async Task<IActionResult> GetQuestions(
+        public async Task<ActionResult<ApiResponse<QuestionListResponse>>> GetQuestions(
             [FromQuery] int page = 1, 
             [FromQuery] int pageSize = 10, 
             [FromQuery] string search = "",
@@ -368,6 +368,7 @@ namespace BE_Phygens.Controllers
             {
                 var query = _context.Questions
                     .Include(q => q.AnswerChoices)
+                    .Include(q => q.Topic)
                     .Where(q => q.IsActive)
                     .AsQueryable();
 
@@ -399,47 +400,289 @@ namespace BE_Phygens.Controllers
                     .ToListAsync();
 
                 // Convert to DTOs
-                var questionDtos = questions.Select(q => new
+                var questionDtos = questions.Select(q => new QuestionDto
                 {
-                    questionId = q.QuestionId,
-                    questionText = q.QuestionText,
-                    difficulty = q.DifficultyLevel,
-                    explanation = q.Explanation,
-                    topic = q.SpecificTopic ?? "Chưa phân loại",
-                    questionType = q.QuestionType,
-                    createdAt = q.CreatedAt,
-                    createdBy = q.CreatedBy ?? "system",
-                    chapterId = q.ChapterId,
-                    answerChoices = q.AnswerChoices?.Select(ac => new
+                    QuestionId = q.QuestionId,
+                    QuestionText = q.QuestionText,
+                    Difficulty = q.DifficultyLevel,
+                    DifficultyLevel = q.DifficultyLevel,
+                    Explanation = q.Explanation,
+                    Topic = q.Topic?.TopicName ?? q.SpecificTopic ?? "Chưa phân loại",
+                    QuestionType = q.QuestionType,
+                    CreatedAt = q.CreatedAt,
+                    CreatedBy = q.CreatedBy ?? "system",
+                    ChapterId = q.ChapterId ?? 0,
+                    ImageUrl = q.ImageUrl ?? "",
+                    AnswerChoices = q.AnswerChoices?.Select(ac => new AnswerChoiceDto
                     {
-                        choiceId = ac.ChoiceId,
-                        choiceText = ac.ChoiceText,
-                        isCorrect = ac.IsCorrect,
-                        choiceLabel = ac.ChoiceLabel ?? "A",
-                        displayOrder = ac.DisplayOrder
-                    }).ToList()
+                        ChoiceId = ac.ChoiceId,
+                        ChoiceText = ac.ChoiceText,
+                        IsCorrect = ac.IsCorrect,
+                        ChoiceLabel = ac.ChoiceLabel ?? "A",
+                        DisplayOrder = ac.DisplayOrder
+                    }).ToList() ?? new List<AnswerChoiceDto>()
                 }).ToList();
 
-                var response = new
+                var response = new QuestionListResponse
                 {
-                    questions = questionDtos,
-                    pagination = new
+                    Questions = questionDtos,
+                    Pagination = new PaginationInfo
                     {
-                        currentPage = page,
-                        pageSize = pageSize,
-                        totalCount = totalCount,
-                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                        CurrentPage = page,
+                        PageSize = pageSize,
+                        TotalCount = totalCount,
+                        TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
                     }
                 };
 
-                return Ok(response);
+                return Ok(new ApiResponse<QuestionListResponse>
+                {
+                    Success = true,
+                    Message = $"Lấy {questionDtos.Count} câu hỏi thành công",
+                    Data = response
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting questions");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new ApiResponse<QuestionListResponse>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Create new question
+        /// POST: ai-question
+        /// </summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiResponse<QuestionDto>>> CreateQuestion([FromBody] GenerateQuestionRequest request)
+        {
+            try
+            {
+                if (request.ChapterId <= 0)
+                {
+                    return BadRequest(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = "ChapterId phải lớn hơn 0"
+                    });
+                }
+
+                var chapter = await _context.Chapters
+                    .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId && c.IsActive);
+
+                if (chapter == null)
+                {
+                    return NotFound(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = "Chapter không tồn tại"
+                    });
+                }
+
+                var question = await _aiService.GenerateQuestionAsync(chapter, request);
+
+                if (request.SaveToDatabase)
+                {
+                    await SaveQuestionToDatabase(question);
+                }
+
+                return Ok(new ApiResponse<QuestionDto>
+                {
+                    Success = true,
+                    Message = "Tạo câu hỏi thành công",
+                    Data = question
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating question");
+                return StatusCode(500, new ApiResponse<QuestionDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get question by ID
+        /// GET: ai-question/{id}
+        /// </summary>
+        [HttpGet("{id}")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ApiResponse<QuestionDto>>> GetQuestionById(string id)
+        {
+            try
+            {
+                var question = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .Include(q => q.Topic)
+                    .FirstOrDefaultAsync(q => q.QuestionId == id && q.IsActive);
+
+                if (question == null)
+                {
+                    return NotFound(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = "Câu hỏi không tồn tại"
+                    });
+                }
+
+                var questionDto = new QuestionDto
+                {
+                    QuestionId = question.QuestionId,
+                    QuestionText = question.QuestionText,
+                    QuestionType = question.QuestionType,
+                    Difficulty = question.DifficultyLevel,
+                    DifficultyLevel = question.DifficultyLevel,
+                    Topic = question.Topic?.TopicName ?? "Chưa phân loại",
+                    ImageUrl = question.ImageUrl ?? "",
+                    CreatedBy = question.CreatedBy,
+                    CreatedAt = question.CreatedAt,
+                    Explanation = question.Explanation,
+                    AnswerChoices = question.AnswerChoices?.Select(ac => new AnswerChoiceDto
+                    {
+                        ChoiceId = ac.ChoiceId,
+                        ChoiceLabel = ac.ChoiceLabel ?? "A",
+                        ChoiceText = ac.ChoiceText,
+                        IsCorrect = ac.IsCorrect,
+                        DisplayOrder = ac.DisplayOrder
+                    }).ToList() ?? new List<AnswerChoiceDto>()
+                };
+
+                return Ok(new ApiResponse<QuestionDto>
+                {
+                    Success = true,
+                    Message = "Lấy câu hỏi thành công",
+                    Data = questionDto
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting question {QuestionId}", id);
+                return StatusCode(500, new ApiResponse<QuestionDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update question
+        /// PUT: ai-question/{id}
+        /// </summary>
+        [HttpPut("{id}")]
+        public async Task<ActionResult<ApiResponse<QuestionDto>>> UpdateQuestion(string id, [FromBody] UpdateQuestionRequest request)
+        {
+            try
+            {
+                var question = await _context.Questions
+                    .Include(q => q.AnswerChoices)
+                    .FirstOrDefaultAsync(q => q.QuestionId == id && q.IsActive);
+
+                if (question == null)
+                {
+                    return NotFound(new ApiResponse<QuestionDto>
+                    {
+                        Success = false,
+                        Message = "Câu hỏi không tồn tại"
+                    });
+                }
+
+                // Update question properties
+                if (!string.IsNullOrEmpty(request.QuestionText))
+                    question.QuestionText = request.QuestionText;
+
+                if (!string.IsNullOrEmpty(request.DifficultyLevel))
+                    question.DifficultyLevel = request.DifficultyLevel;
+
+                if (!string.IsNullOrEmpty(request.Explanation))
+                    question.Explanation = request.Explanation;
+
+                // Update answer choices if provided
+                if (request.AnswerChoices?.Any() == true)
+                {
+                    // Remove old choices
+                    _context.AnswerChoices.RemoveRange(question.AnswerChoices);
+
+                    // Add new choices
+                    foreach (var choice in request.AnswerChoices)
+                    {
+                        _context.AnswerChoices.Add(new AnswerChoice
+                        {
+                            ChoiceId = Guid.NewGuid().ToString(),
+                            QuestionId = id,
+                            ChoiceLabel = choice.ChoiceLabel,
+                            ChoiceText = choice.ChoiceText,
+                            IsCorrect = choice.IsCorrect,
+                            DisplayOrder = choice.DisplayOrder
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<QuestionDto>
+                {
+                    Success = true,
+                    Message = "Cập nhật câu hỏi thành công",
+                    Data = null
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating question {QuestionId}", id);
+                return StatusCode(500, new ApiResponse<QuestionDto>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete question (soft delete)
+        /// DELETE: ai-question/{id}
+        /// </summary>
+        [HttpDelete("{id}")]
+        public async Task<ActionResult<ApiResponse<object>>> DeleteQuestion(string id)
+        {
+            try
+            {
+                var question = await _context.Questions
+                    .FirstOrDefaultAsync(q => q.QuestionId == id && q.IsActive);
+
+                if (question == null)
+                {
+                    return NotFound(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Câu hỏi không tồn tại"
+                    });
+                }
+
+                question.IsActive = false;
+                await _context.SaveChangesAsync();
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Xóa câu hỏi thành công",
+                    Data = null
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting question {QuestionId}", id);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Lỗi server: {ex.Message}"
                 });
             }
         }
@@ -494,38 +737,6 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Get AI configuration and status
-        /// </summary>
-        [HttpGet("config")]
-        [AllowAnonymous]
-        public async Task<ActionResult<ApiResponse<AIConfigDto>>> GetAIConfig()
-        {
-            try
-            {
-                var config = await _aiService.GetAIStatusAsync();
-
-                return Ok(new ApiResponse<AIConfigDto>
-                {
-                    Success = true,
-                    Message = "Lấy cấu hình AI thành công",
-                    Data = config
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting AI config");
-                return StatusCode(500, new ApiResponse<AIConfigDto>
-                {
-                    Success = false,
-                    Message = $"Lỗi server: {ex.Message}"
-                });
-            }
-        }
-
-        /// <summary>
-        /// Debug endpoint để kiểm tra database status
-        /// </summary>
         [HttpGet("debug/database-status")]
         [AllowAnonymous]
         public async Task<ActionResult<ApiResponse<object>>> GetDatabaseStatus()
@@ -608,79 +819,6 @@ namespace BE_Phygens.Controllers
                 });
             }
         }
-
-        /// <summary>
-        /// Seed sample chapters cho testing
-        /// </summary>
-        [HttpPost("debug/seed-chapters")]
-        [AllowAnonymous]
-        public async Task<ActionResult<ApiResponse<object>>> SeedSampleChapters()
-        {
-            try
-            {
-                _logger.LogInformation("Seeding sample chapters...");
-
-                // Check if chapters already exist
-                var existingCount = await _context.Chapters.CountAsync();
-                if (existingCount > 0)
-                {
-                    return Ok(new ApiResponse<object>
-                    {
-                        Success = true,
-                        Message = $"Chapters already exist: {existingCount} chapters found",
-                        Data = new { ExistingChapters = existingCount }
-                    });
-                }
-
-                // Get chapters from database
-                var chapters = await _context.Chapters
-                    .Where(c => c.IsActive)
-                    .OrderBy(c => c.Grade)
-                    .ThenBy(c => c.DisplayOrder)
-                    .ToListAsync();
-
-                if (!chapters.Any())
-                {
-                    _logger.LogWarning("No chapters found in database");
-                    return NotFound(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Không tìm thấy chapters trong database",
-                        Data = null
-                    });
-                }
-
-                _logger.LogInformation($"Successfully retrieved {chapters.Count} chapters from database");
-
-                return Ok(new ApiResponse<object>
-                {
-                    Success = true,
-                    Message = $"Đã tìm thấy {chapters.Count} chapters trong database",
-                    Data = new { 
-                        TotalChapters = chapters.Count,
-                        Chapters = chapters.Select(c => new { 
-                            c.ChapterId, 
-                            c.ChapterName, 
-                            c.Grade, 
-                            c.DisplayOrder,
-                            c.Description,
-                            c.IsActive,
-                            c.CreatedAt
-                        }).ToList()
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error seeding sample chapters");
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = $"Lỗi tạo sample chapters: {ex.Message}"
-                });
-            }
-        }
-
         /// <summary>
         /// Generate explanation for a question using AI
         /// POST: ai-question/generate-explanation

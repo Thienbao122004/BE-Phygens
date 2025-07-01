@@ -404,7 +404,7 @@ namespace BE_Phygens.Dto
         public string ExamType { get; set; } = string.Empty; // 15p, 1tiet, cuoiky
         
         [Required]
-        public int DurationMinutes { get; set; }
+        public int DurationMinutes { get; set; } = 1;
         
         [Required]
         public List<ChapterRequirement> ChapterRequirements { get; set; } = new();
@@ -692,5 +692,29 @@ namespace BE_Phygens.Dto
     public class GenerateExplanationRequest
     {
         public string QuestionId { get; set; } = string.Empty;
+    }
+
+    public class UpdateQuestionRequest
+    {
+        public string? QuestionText { get; set; }
+        public string? DifficultyLevel { get; set; }
+        public string? Explanation { get; set; }
+        public List<AnswerChoiceDto>? AnswerChoices { get; set; }
+    }
+
+    public class QuestionListResponse
+    {
+        public List<QuestionDto> Questions { get; set; } = new();
+        public PaginationInfo Pagination { get; set; } = new();
+    }
+
+    public class PaginationInfo
+    {
+        public int CurrentPage { get; set; }
+        public int PageSize { get; set; }
+        public int TotalCount { get; set; }
+        public int TotalPages { get; set; }
+        public bool HasNext => CurrentPage < TotalPages;
+        public bool HasPrevious => CurrentPage > 1;
     }
 } 
