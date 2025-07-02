@@ -246,6 +246,15 @@ namespace BE_Phygens
 
             app.UseRouting();
 
+            // Enable static file serving for uploads
+            app.UseStaticFiles();
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads")),
+                RequestPath = "/uploads"
+            });
+
             // Use CORS
             if (app.Environment.IsDevelopment())
             {
