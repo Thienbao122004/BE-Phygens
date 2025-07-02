@@ -147,9 +147,18 @@ namespace BE_Phygens
             {
                 options.AddPolicy("AllowAll", policy =>
                 {
-                    policy.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader();
+                    policy.WithOrigins(
+                        "http://localhost:5173",
+                        "http://localhost:5174", 
+                        "http://localhost:3000",
+                        "https://fe-physics-test-system-highschool.vercel.app",
+                        "https://fe-physics-test-system-highschool-r.vercel.app",
+                        "https://fe-physics-test-system-highschool-r.vercel.app"
+                    )
+                    .AllowAnyMethod()
+                    .AllowAnyHeader()
+                    .AllowCredentials()
+                    .WithExposedHeaders("Authorization");
                 });
                 
                 options.AddPolicy("Development", policy =>
@@ -157,7 +166,8 @@ namespace BE_Phygens
                     policy.WithOrigins("http://localhost:5173", "http://localhost:5174", "http://localhost:3000")
                           .AllowAnyMethod()
                           .AllowAnyHeader()
-                          .AllowCredentials();
+                          .AllowCredentials()
+                          .WithExposedHeaders("Authorization");
                 });
             });
 
@@ -293,15 +303,8 @@ namespace BE_Phygens
                 RequestPath = "/uploads"
             });
 
-            // Use CORS
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseCors("Development");
-            }
-            else
-            {
-                app.UseCors("AllowAll");
-            }
+            // 🔒 Use CORS before Authentication & Authorization
+            app.UseCors("AllowAll"); // Luôn dùng AllowAll policy vì đã config đúng domain
 
             app.UseAuthentication();
             app.UseAuthorization();
