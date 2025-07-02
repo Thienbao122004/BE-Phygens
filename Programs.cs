@@ -248,10 +248,48 @@ namespace BE_Phygens
 
             // Enable static file serving for uploads
             app.UseStaticFiles();
+            
+            // 🎯 Đảm bảo tất cả thư mục cần thiết tồn tại
+            var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsPath = Path.Combine(wwwrootPath, "uploads");
+            var nestedUploadsPath = Path.Combine(uploadsPath, "uploads");
+            var essayImagesPath = Path.Combine(uploadsPath, "essay-images");
+            var chatImagesPath = Path.Combine(wwwrootPath, "chat-images");
+            var imagesPath = Path.Combine(wwwrootPath, "images");
+
+            var requiredDirectories = new[] { 
+                wwwrootPath, 
+                uploadsPath, 
+                nestedUploadsPath, 
+                essayImagesPath, 
+                chatImagesPath, 
+                imagesPath 
+            };
+
+            try
+            {
+                foreach (var dir in requiredDirectories)
+                {
+                    if (!Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                        Console.WriteLine($"✅ Created directory: {dir}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"📁 Directory exists: {dir}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error creating directories: {ex.Message}");
+                throw; // Re-throw to prevent app from starting with missing directories
+            }
+            
             app.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
-                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads")),
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
                 RequestPath = "/uploads"
             });
 
