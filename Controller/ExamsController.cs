@@ -42,57 +42,78 @@ namespace BE_Phygens.Controllers
 
         // GET: exams
         [HttpGet]
-        public async Task<IActionResult> GetAllExams()
+        public async Task<IActionResult> GetAllExams([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
                 // Test database connection first
                 await _context.Database.CanConnectAsync();
                 
-                var exams = await _context.Exams
+                var query = _context.Exams
                     .Include(e => e.ExamQuestions)
                     .ThenInclude(eq => eq.Question)
                     .ThenInclude(q => q.Topic)
+                    .AsNoTracking();
+
+                // Get total count
+                var totalCount = await query.CountAsync();
+
+                // Apply pagination
+                var exams = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .ToListAsync();
             
-            var examDtos = exams.Select(e => new ExamDetailsDto
-            {
-                ExamId = e.ExamId,
-                ExamName = e.ExamName,
-                Description = e.Description,
-                DurationMinutes = e.DurationMinutes ?? 1,
-                ExamType = e.ExamType,
-                CreatedBy = e.CreatedBy,
-                IsPublished = e.IsPublished,
-                CreatedAt = e.CreatedAt,
-                Questions = e.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
+                var examDtos = exams.Select(e => new ExamDetailsDto
                 {
-                    ExamQuestionId = eq.ExamQuestionId,
-                    QuestionId = eq.QuestionId,
-                    QuestionOrder = eq.QuestionOrder ?? 0,
-                    PointsWeight = eq.PointsWeight,
-                    Question = eq.Question != null ? new QuestionResponseDto
+                    ExamId = e.ExamId,
+                    ExamName = e.ExamName,
+                    Description = e.Description,
+                    DurationMinutes = e.DurationMinutes ?? 1,
+                    ExamType = e.ExamType,
+                    CreatedBy = e.CreatedBy,
+                    IsPublished = e.IsPublished,
+                    CreatedAt = e.CreatedAt,
+                    Questions = e.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
                     {
-                        QuestionId = eq.Question.QuestionId,
-                        QuestionText = eq.Question.QuestionText,
-                        QuestionType = eq.Question.QuestionType,
-                        Difficulty = eq.Question.DifficultyLevel,
-                        Topic = eq.Question.Topic?.TopicName ?? "",
-                        // Basic essay properties for list view
-                        MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 50 : null,
-                        MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
-                        EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null
-                    } : null
-                }).ToList() ?? new List<ExamQuestionResponseDto>()
-            }).ToList();
+                        ExamQuestionId = eq.ExamQuestionId,
+                        QuestionId = eq.QuestionId,
+                        QuestionOrder = eq.QuestionOrder ?? 0,
+                        PointsWeight = eq.PointsWeight,
+                        Question = eq.Question != null ? new QuestionResponseDto
+                        {
+                            QuestionId = eq.Question.QuestionId,
+                            QuestionText = eq.Question.QuestionText,
+                            QuestionType = eq.Question.QuestionType,
+                            Difficulty = eq.Question.DifficultyLevel,
+                            Topic = eq.Question.Topic?.TopicName ?? "",
+                            MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 50 : null,
+                            MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
+                            EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null
+                        } : null
+                    }).ToList() ?? new List<ExamQuestionResponseDto>()
+                }).ToList();
 
-                return Ok(examDtos);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Exams retrieved successfully",
+                    data = examDtos,
+                    pagination = new
+                    {
+                        page,
+                        pageSize,
+                        totalItems = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message,
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message,
                     details = ex.InnerException?.Message 
                 });
             }
@@ -102,60 +123,82 @@ namespace BE_Phygens.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExamById(string id)
         {
-            var exam = await _context.Exams
-                .Include(e => e.ExamQuestions)
-                .ThenInclude(eq => eq.Question)
-                .ThenInclude(q => q.Topic)
-                .Include(e => e.ExamQuestions)
-                .ThenInclude(eq => eq.Question)
-                .ThenInclude(q => q.AnswerChoices)
-                .FirstOrDefaultAsync(e => e.ExamId == id);
-
-            if (exam == null) return NotFound();
-
-            var examDto = new ExamDetailsDto
+            try 
             {
-                ExamId = exam.ExamId,
-                ExamName = exam.ExamName,
-                Description = exam.Description,
-                DurationMinutes = exam.DurationMinutes ?? 1,
-                ExamType = exam.ExamType,
-                CreatedBy = exam.CreatedBy,
-                IsPublished = exam.IsPublished,
-                CreatedAt = exam.CreatedAt,
-                Questions = exam.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
-                {
-                    ExamQuestionId = eq.ExamQuestionId,
-                    QuestionId = eq.QuestionId,
-                    QuestionOrder = eq.QuestionOrder ?? 0,
-                    PointsWeight = eq.PointsWeight,
-                    Question = eq.Question != null ? new QuestionResponseDto
-                    {
-                        QuestionId = eq.Question.QuestionId,
-                        QuestionText = eq.Question.QuestionText,
-                        QuestionType = eq.Question.QuestionType,
-                        Difficulty = eq.Question.DifficultyLevel,
-                        Topic = eq.Question.Topic?.TopicName ?? "",
-                        AnswerChoices = eq.Question.AnswerChoices?.Select(ac => new AnswerChoiceResponseDto
-                        {
-                            ChoiceId = ac.ChoiceId,
-                            ChoiceLabel = ac.ChoiceLabel,
-                            ChoiceText = ac.ChoiceText,
-                            IsCorrect = ac.IsCorrect,
-                            DisplayOrder = ac.DisplayOrder
-                        }).ToList() ?? new List<AnswerChoiceResponseDto>(),
-                        // Map essay-specific properties from metadata
-                        MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 1 : null,
-                        MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
-                        EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null,
-                        KeyPoints = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<List<string>>(eq.Question.AiGenerationMetadata, "keyPoints") : null,
-                        GradingRubric = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "gradingRubric") : null,
-                        SampleAnswer = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "sampleAnswer") : null
-                    } : null
-                }).ToList() ?? new List<ExamQuestionResponseDto>()
-            };
+                var exam = await _context.Exams
+                    .Include(e => e.ExamQuestions)
+                    .ThenInclude(eq => eq.Question)
+                    .ThenInclude(q => q.Topic)
+                    .Include(e => e.ExamQuestions)
+                    .ThenInclude(eq => eq.Question)
+                    .ThenInclude(q => q.AnswerChoices)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(e => e.ExamId == id);
 
-            return Ok(examDto);
+                if (exam == null)
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = $"Exam with ID {id} not found"
+                    });
+
+                var examDto = new ExamDetailsDto
+                {
+                    ExamId = exam.ExamId,
+                    ExamName = exam.ExamName,
+                    Description = exam.Description,
+                    DurationMinutes = exam.DurationMinutes ?? 1,
+                    ExamType = exam.ExamType,
+                    CreatedBy = exam.CreatedBy,
+                    IsPublished = exam.IsPublished,
+                    CreatedAt = exam.CreatedAt,
+                    Questions = exam.ExamQuestions?.Select(eq => new ExamQuestionResponseDto
+                    {
+                        ExamQuestionId = eq.ExamQuestionId,
+                        QuestionId = eq.QuestionId,
+                        QuestionOrder = eq.QuestionOrder ?? 0,
+                        PointsWeight = eq.PointsWeight,
+                        Question = eq.Question != null ? new QuestionResponseDto
+                        {
+                            QuestionId = eq.Question.QuestionId,
+                            QuestionText = eq.Question.QuestionText,
+                            QuestionType = eq.Question.QuestionType,
+                            Difficulty = eq.Question.DifficultyLevel,
+                            Topic = eq.Question.Topic?.TopicName ?? "",
+                            AnswerChoices = eq.Question.AnswerChoices?.Select(ac => new AnswerChoiceResponseDto
+                            {
+                                ChoiceId = ac.ChoiceId,
+                                ChoiceLabel = ac.ChoiceLabel,
+                                ChoiceText = ac.ChoiceText,
+                                IsCorrect = ac.IsCorrect,
+                                DisplayOrder = ac.DisplayOrder
+                            }).ToList() ?? new List<AnswerChoiceResponseDto>(),
+                            MinWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "minWords") ?? 1 : null,
+                            MaxWords = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<int?>(eq.Question.AiGenerationMetadata, "maxWords") ?? 300 : null,
+                            EssayStyle = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "essayStyle") ?? "analytical" : null,
+                            KeyPoints = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<List<string>>(eq.Question.AiGenerationMetadata, "keyPoints") : null,
+                            GradingRubric = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "gradingRubric") : null,
+                            SampleAnswer = eq.Question.QuestionType == "essay" ? GetEssayMetadataProperty<string>(eq.Question.AiGenerationMetadata, "sampleAnswer") : null
+                        } : null
+                    }).ToList() ?? new List<ExamQuestionResponseDto>()
+                };
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Exam retrieved successfully",
+                    data = examDto
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message
+                });
+            }
         }
 
         // POST: exams
@@ -689,15 +732,23 @@ namespace BE_Phygens.Controllers
         // GET: exams/history/{userId}
         [Authorize]
         [HttpGet("history/{userId}")]
-        public async Task<IActionResult> GetUserExamHistory(string userId)
+        public async Task<IActionResult> GetUserExamHistory(string userId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
-                var attempts = await _context.StudentAttempts
+                var query = _context.StudentAttempts
                     .Include(a => a.Exam)
                     .Include(a => a.StudentAnswers)
                     .Where(a => a.UserId == userId)
                     .OrderByDescending(a => a.StartTime)
+                    .AsNoTracking();
+
+                // Get total count
+                var totalCount = await query.CountAsync();
+
+                var attempts = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .Select(a => new
                     {
                         id = a.AttemptId,
@@ -718,14 +769,27 @@ namespace BE_Phygens.Controllers
                     })
                     .ToListAsync();
 
-                return Ok(attempts);
+                return Ok(new
+                {
+                    success = true,
+                    message = "User exam history retrieved successfully",
+                    data = attempts,
+                    pagination = new
+                    {
+                        page,
+                        pageSize,
+                        totalItems = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new
                 {
-                    error = "Internal server error",
-                    message = ex.Message,
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message,
                     details = ex.InnerException?.Message
                 });
             }

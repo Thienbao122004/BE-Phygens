@@ -45,11 +45,11 @@ namespace BE_Phygens.Controllers
 
         // GET: smart-exams/matrices
         [HttpGet("matrices")]
-        public async Task<IActionResult> GetAllMatrices([FromQuery] int? grade = null)
+        public async Task<IActionResult> GetAllMatrices([FromQuery] int? grade = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
-                var query = _context.Set<ExamMatrix>().AsQueryable();
+                var query = _context.Set<ExamMatrix>().AsQueryable().AsNoTracking();
 
                 if (grade.HasValue)
                 {
@@ -59,8 +59,12 @@ namespace BE_Phygens.Controllers
                         .Any(d => d.Chapter.Grade == grade.Value));
                 }
 
+                var totalCount = await query.CountAsync();
+
                 var matrices = await query
                     .OrderByDescending(m => m.CreatedAt)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .Select(m => new
                     {
                         matrixId = m.MatrixId,
@@ -74,14 +78,28 @@ namespace BE_Phygens.Controllers
                     })
                     .ToListAsync();
 
-                return Ok(matrices);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Exam matrices retrieved successfully",
+                    data = matrices,
+                    pagination = new
+                    {
+                        page,
+                        pageSize,
+                        totalItems = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting exam matrices");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message
                 });
             }
         }
@@ -95,10 +113,15 @@ namespace BE_Phygens.Controllers
                 var matrix = await _context.Set<ExamMatrix>()
                     .Include(m => m.ExamMatrixDetails)
                     .ThenInclude(d => d.Chapter)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(m => m.MatrixId == id);
 
                 if (matrix == null)
-                    return NotFound(new { error = "Exam matrix not found" });
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = $"Exam matrix with ID {id} not found"
+                    });
 
                 var matrixDto = new
                 {
@@ -119,14 +142,21 @@ namespace BE_Phygens.Controllers
                     }).ToList()
                 };
 
-                return Ok(matrixDto);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Exam matrix retrieved successfully",
+                    data = matrixDto
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting exam matrix by ID");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message
                 });
             }
         }
@@ -391,14 +421,21 @@ namespace BE_Phygens.Controllers
 
         // GET: smart-exams/chapters
         [HttpGet("chapters")]
-        public async Task<IActionResult> GetChapters()
+        public async Task<IActionResult> GetChapters([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
-                var chapters = await _context.Chapters
+                var query = _context.Chapters
                     .Where(c => c.IsActive)
                     .OrderBy(c => c.Grade)
                     .ThenBy(c => c.DisplayOrder)
+                    .AsNoTracking();
+
+                var totalCount = await query.CountAsync();
+
+                var chapters = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .Select(c => new
                     {
                         chapterId = c.ChapterId,
@@ -410,21 +447,35 @@ namespace BE_Phygens.Controllers
                     })
                     .ToListAsync();
 
-                return Ok(chapters);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Chapters retrieved successfully",
+                    data = chapters,
+                    pagination = new
+                    {
+                        page,
+                        pageSize,
+                        totalItems = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting chapters");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message
                 });
             }
         }
 
         // GET: smart-exams/templates
         [HttpGet("templates")]
-        public async Task<IActionResult> GetExamTemplates()
+        public async Task<IActionResult> GetExamTemplates([FromQuery] string? type = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
             try
             {
@@ -453,14 +504,43 @@ namespace BE_Phygens.Controllers
                     }
                 };
 
-                return Ok(templates);
+                // Filter by type if provided
+                if (!string.IsNullOrEmpty(type))
+                {
+                    templates = templates.Where(t => ((dynamic)t).templateId.Contains(type)).ToList();
+                }
+
+                // Get total count before pagination
+                var totalCount = templates.Count;
+
+                // Apply pagination
+                templates = templates
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Exam templates retrieved successfully",
+                    data = templates,
+                    pagination = new
+                    {
+                        page,
+                        pageSize,
+                        totalItems = totalCount,
+                        totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+                    }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting exam templates");
-                return StatusCode(500, new { 
-                    error = "Internal server error", 
-                    message = ex.Message 
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Internal server error",
+                    error = ex.Message
                 });
             }
         }
