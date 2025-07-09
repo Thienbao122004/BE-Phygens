@@ -568,7 +568,7 @@ Trả về JSON format:
                     SampleAnswer = data?.GetValueOrDefault("sampleAnswer")?.ToString(),
                     MaxWords = request.MaxWords,
                     MinWords = request.MinWords,
-                    CreatedBy = "AI_SYSTEM",
+                    CreatedBy = "ai_system",
                     CreatedAt = DateTime.UtcNow
                 };
             }
@@ -591,7 +591,7 @@ Trả về JSON format:
                 SampleAnswer = "Câu trả lời mẫu sẽ bao gồm: định nghĩa khái niệm, giải thích chi tiết, ví dụ thực tế, và kết luận.",
                 MaxWords = request.MaxWords,
                 MinWords = request.MinWords,
-                CreatedBy = "AI_SYSTEM",
+                CreatedBy = "ai_system",
                 CreatedAt = DateTime.UtcNow,
                 KeyPoints = new List<string> { "Định nghĩa", "Giải thích", "Ví dụ", "Kết luận" }
             };

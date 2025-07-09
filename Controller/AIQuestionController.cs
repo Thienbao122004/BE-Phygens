@@ -9,16 +9,16 @@ using System.Text;
 
 namespace BE_Phygens.Controllers
 {
-    [Route("ai-question")]
+    [Route("questions")]
     [ApiController]
     // [Authorize] // Bỏ auth để test
-    public class AIQuestionController : ControllerBase
+    public class QuestionsController : ControllerBase
     {
         private readonly PhygensContext _context;
         private readonly IAIService _aiService;
-        private readonly ILogger<AIQuestionController> _logger;
+        private readonly ILogger<QuestionsController> _logger;
 
-        public AIQuestionController(PhygensContext context, IAIService aiService, ILogger<AIQuestionController> logger)
+        public QuestionsController(PhygensContext context, IAIService aiService, ILogger<QuestionsController> logger)
         {
             _context = context;
             _aiService = aiService;
@@ -27,9 +27,9 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Generate AI question using real AI service (OpenAI/Gemini)
-        /// POST: ai-questions/generate
+        /// POST: questions/ai-generated
         /// </summary>
-        [HttpPost("generate")]
+        [HttpPost("ai-generated")]
         public async Task<IActionResult> GenerateQuestion([FromBody] GenerateQuestionRequest request)
         {
             try
@@ -102,7 +102,7 @@ namespace BE_Phygens.Controllers
                     await SaveQuestionToDatabase(questionDto);
                 }
 
-                return Ok(new {
+                var responseData = new {
                     questionId = questionDto.QuestionId,
                     questionText = questionDto.QuestionText,
                     questionType = questionDto.QuestionType,
@@ -117,6 +117,13 @@ namespace BE_Phygens.Controllers
                     explanation = questionDto.Explanation,
                     createdBy = questionDto.CreatedBy,
                     createdAt = questionDto.CreatedAt
+                };
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = $"Tạo câu hỏi AI thành công! Chủ đề: {questionDto.Topic}",
+                    Data = responseData
                 });
             }
             catch (Exception ex)
@@ -132,7 +139,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Generate multiple questions in batch
         /// </summary>
-        [HttpPost("generate-batch")]
+        [HttpPost("batch")]
         public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GenerateBatchQuestions([FromBody] BatchGenerateRequest request)
         {
             try
@@ -164,11 +171,11 @@ namespace BE_Phygens.Controllers
                         var question = await _aiService.GenerateQuestionAsync(chapter, questionRequest);
                         questions.Add(question);
 
-                        // Save to database if requested - temporarily disabled for debugging
+                        // Save to database if requested
                         if (request.SaveToDatabase)
                         {
-                            _logger.LogWarning($"Database save temporarily disabled for question {question.QuestionId}");
-                            // await SaveQuestionToDatabase(question);
+                            _logger.LogInformation($"Saving batch question {question.QuestionId} to database...");
+                            await SaveQuestionToDatabase(question);
                         }
 
                         // Add delay to avoid rate limiting
@@ -201,7 +208,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Analyze and improve existing question using AI
         /// </summary>
-        [HttpPost("improve/{questionId}")]
+        [HttpPut("{questionId}/improvements")]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> ImproveQuestion(string questionId, [FromBody] ImproveQuestionRequest request)
         {
             try
@@ -240,11 +247,13 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Get AI suggestions for question topics
         /// </summary>
-        [HttpPost("suggest-topics")]
-        public async Task<ActionResult<ApiResponse<List<TopicSuggestionDto>>>> SuggestTopics([FromBody] TopicSuggestionRequest request)
+        [HttpGet("topics/suggestions")]
+        public async Task<ActionResult<ApiResponse<List<TopicSuggestionDto>>>> SuggestTopics([FromQuery] int chapterId, [FromQuery] int maxSuggestions = 5)
         {
             try
             {
+                var request = new TopicSuggestionRequest { ChapterId = chapterId, MaxSuggestions = maxSuggestions };
+                
                 var chapter = await _context.Chapters
                     .FirstOrDefaultAsync(c => c.ChapterId == request.ChapterId);
 
@@ -278,7 +287,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Validate question quality using AI
         /// </summary>
-        [HttpPost("validate/{questionId}")]
+        [HttpGet("{questionId}/validation")]
         public async Task<ActionResult<ApiResponse<QuestionValidationDto>>> ValidateQuestion(string questionId)
         {
             try
@@ -317,7 +326,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Test AI connection and capabilities
         /// </summary>
-        [HttpPost("test-connection")]
+        [HttpGet("health/ai-connection")]
         [AllowAnonymous]
         public async Task<ActionResult<ApiResponse<object>>> TestAIConnection()
         {
@@ -353,7 +362,7 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Get all questions with pagination and filters
-        /// GET: ai-question
+        /// GET: questions
         /// </summary>
         [HttpGet]
         [AllowAnonymous]
@@ -410,7 +419,7 @@ namespace BE_Phygens.Controllers
                     Topic = q.Topic?.TopicName ?? q.SpecificTopic ?? "Chưa phân loại",
                     QuestionType = q.QuestionType,
                     CreatedAt = q.CreatedAt,
-                    CreatedBy = q.CreatedBy ?? "system",
+                    CreatedBy = q.CreatedBy ?? "ai_system",
                     ChapterId = q.ChapterId ?? 0,
                     ImageUrl = q.ImageUrl ?? "",
                     AnswerChoices = q.AnswerChoices?.Select(ac => new AnswerChoiceDto
@@ -455,7 +464,7 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Create new question
-        /// POST: ai-question
+        /// POST: questions
         /// </summary>
         [HttpPost]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> CreateQuestion([FromBody] GenerateQuestionRequest request)
@@ -510,7 +519,7 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Get question by ID
-        /// GET: ai-question/{id}
+        /// GET: questions/{id}
         /// </summary>
         [HttpGet("{id}")]
         [AllowAnonymous]
@@ -574,7 +583,7 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Update question
-        /// PUT: ai-question/{id}
+        /// PUT: questions/{id}
         /// </summary>
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> UpdateQuestion(string id, [FromBody] UpdateQuestionRequest request)
@@ -647,7 +656,7 @@ namespace BE_Phygens.Controllers
 
         /// <summary>
         /// Delete question (soft delete)
-        /// DELETE: ai-question/{id}
+        /// DELETE: questions/{id}
         /// </summary>
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<object>>> DeleteQuestion(string id)
@@ -821,17 +830,22 @@ namespace BE_Phygens.Controllers
         }
         /// <summary>
         /// Generate explanation for a question using AI
-        /// POST: ai-question/generate-explanation
+        /// POST: questions/{questionId}/explanations
         /// </summary>
-        [HttpPost("generate-explanation")]
-        public async Task<IActionResult> GenerateExplanation([FromBody] GenerateExplanationRequest request)
+        [HttpPost("{questionId}/explanations")]
+        public async Task<IActionResult> GenerateExplanation(string questionId, [FromBody] GenerateExplanationRequest request = null)
         {
             try
             {
-                if (string.IsNullOrEmpty(request.QuestionId))
+                if (string.IsNullOrEmpty(questionId))
                 {
                     return BadRequest(new { error = "validation_error", message = "QuestionId là bắt buộc" });
                 }
+
+                // Override request QuestionId with path parameter
+                if (request == null)
+                    request = new GenerateExplanationRequest();
+                request.QuestionId = questionId;
 
                 // Lấy thông tin câu hỏi
                 var question = await _context.Questions
@@ -874,7 +888,7 @@ namespace BE_Phygens.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi tạo explanation cho câu hỏi {QuestionId}", request.QuestionId);
+                _logger.LogError(ex, "Lỗi khi tạo explanation cho câu hỏi {QuestionId}", questionId);
                 return StatusCode(500, new { error = "internal_error", message = "Có lỗi xảy ra khi tạo giải thích" });
             }
         }
@@ -956,67 +970,8 @@ namespace BE_Phygens.Controllers
 
         private async Task<string> EnsureAISystemUser()
         {
-            try
-            {
-                // First try to find any admin user
-                var adminUser = await _context.Users
-                    .Where(u => u.Role == "admin")
-                    .FirstOrDefaultAsync();
-                
-                if (adminUser != null)
-                {
-                    _logger.LogInformation($"Using existing admin user: {adminUser.UserId}");
-                    return adminUser.UserId;
-                }
-                
-                // Try to find ai_system user
-                var aiSystemUser = await _context.Users
-                    .FirstOrDefaultAsync(u => u.UserId == "ai_system");
-                
-                if (aiSystemUser != null)
-                {
-                    _logger.LogInformation("Using existing ai_system user");
-                    return "ai_system";
-                }
-                
-                // Create ai_system user if not exists
-                _logger.LogInformation("Creating ai_system user...");
-                var newAiUser = new User
-                {
-                    UserId = "ai_system",
-                    Username = "ai_system",
-                    FullName = "ai_system",
-                    Email = "ai_system@phygens.local",
-                    Role = "admin",
-                    PasswordHash = "$2a$11$dummyhashforaisystemuser123456789",
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true
-                };
-                
-                _context.Users.Add(newAiUser);
-                await _context.SaveChangesAsync();
-                
-                _logger.LogInformation("Created ai_system user successfully");
-                return "ai_system";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not ensure ai_system user, using existing fallback");
-                
-                // Last resort: try to get any user
-                try
-                {
-                    var anyUser = await _context.Users.FirstOrDefaultAsync();
-                    if (anyUser != null)
-                    {
-                        return anyUser.UserId;
-                    }
-                }
-                catch { }
-                
-                // Ultimate fallback - this will likely cause FK violation but let's see the exact error
-                return "ai_system";
-            }
+            // ✅ LUÔN SỬ DỤNG ai_system - Đơn giản và đáng tin cậy
+            return "ai_system";
         }
 
         private async Task<string> GetOrCreateDefaultTopic()
