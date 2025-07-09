@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace BE_Phygens.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("exams")]
     public class ExamsController : ControllerBase
     {
         private readonly PhygensContext _context;
@@ -280,7 +280,7 @@ namespace BE_Phygens.Controllers
                 ExamId = Guid.NewGuid().ToString(),
                 ExamName = examDto.ExamName,
                 Description = examDto.Description,
-                DurationMinutes = examDto.DurationMinutes,
+                DurationMinutes = examDto.DurationMinutes > 0 ? examDto.DurationMinutes : 45, // ✅ Default 45 phút nếu <= 0
                 ExamType = examType, 
                 CreatedBy = createdBy, 
                 IsPublished = false, 
@@ -339,7 +339,21 @@ namespace BE_Phygens.Controllers
 
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetExamById), new { id = exam.ExamId }, exam);
+            return Ok(new
+            {
+                success = true,
+                message = $"Exam '{exam.ExamName}' created successfully",
+                data = new
+                {
+                    examId = exam.ExamId,
+                    examName = exam.ExamName,
+                    description = exam.Description,
+                    durationMinutes = exam.DurationMinutes,
+                    examType = exam.ExamType,
+                    createdAt = exam.CreatedAt,
+                    isPublished = exam.IsPublished
+                }
+            });
         }
 
         // PUT: exams/{id}
@@ -373,7 +387,7 @@ namespace BE_Phygens.Controllers
 
             exam.ExamName = examDto.ExamName;
             exam.Description = examDto.Description;
-            exam.DurationMinutes = examDto.DurationMinutes;
+            exam.DurationMinutes = examDto.DurationMinutes > 0 ? examDto.DurationMinutes : 45; // ✅ Default 45 phút nếu <= 0
             exam.ExamType = examType; // ✅ Sử dụng validated ExamType
             exam.IsPublished = examDto.IsPublished;
             exam.AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig);
@@ -403,25 +417,63 @@ namespace BE_Phygens.Controllers
             }
 
             await _context.SaveChangesAsync();
-            return NoContent();
+            
+            return Ok(new
+            {
+                success = true,
+                message = $"Exam '{exam.ExamName}' updated successfully",
+                data = new
+                {
+                    examId = exam.ExamId,
+                    examName = exam.ExamName,
+                    description = exam.Description,
+                    durationMinutes = exam.DurationMinutes,
+                    examType = exam.ExamType,
+                    isPublished = exam.IsPublished
+                }
+            });
         }
 
         // DELETE: exams/{id}
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteExam(string id)
         {
-            var exam = await _context.Exams.FindAsync(id);
-            if (exam == null) return NotFound();
+            try
+            {
+                var exam = await _context.Exams.FindAsync(id);
+                if (exam == null) 
+                {
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = $"Exam with ID {id} not found"
+                    });
+                }
 
-            // Remove related exam questions first
-            var examQuestions = await _context.ExamQuestions
-                .Where(eq => eq.ExamId == id)
-                .ToListAsync();
-            _context.ExamQuestions.RemoveRange(examQuestions);
+                // Remove related exam questions first
+                var examQuestions = await _context.ExamQuestions
+                    .Where(eq => eq.ExamId == id)
+                    .ToListAsync();
+                _context.ExamQuestions.RemoveRange(examQuestions);
 
-            _context.Exams.Remove(exam);
-            await _context.SaveChangesAsync();
-            return NoContent();
+                _context.Exams.Remove(exam);
+                await _context.SaveChangesAsync();
+                
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Exam '{exam.ExamName}' deleted successfully"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Error deleting exam",
+                    error = ex.Message
+                });
+            }
         }
 
         // POST: exams/generate
@@ -439,7 +491,7 @@ namespace BE_Phygens.Controllers
                 ExamId = Guid.NewGuid().ToString(),
                 ExamName = generateDto.ExamName,
                 Description = generateDto.Description,
-                DurationMinutes = generateDto.DurationMinutes,
+                DurationMinutes = generateDto.DurationMinutes > 0 ? generateDto.DurationMinutes : 45, // ✅ Default 45 phút nếu <= 0
                 ExamType = examType, 
                 CreatedBy = createdBy, // ✅ Sử dụng validated CreatedBy
                 IsPublished = false,
@@ -682,51 +734,8 @@ namespace BE_Phygens.Controllers
 
         private string GetOrCreateDefaultUser()
         {
-            try
-            {
-                // Try to get ai_system user first
-                var aiSystemUser = _context.Users.FirstOrDefault(u => u.UserId == "ai_system");
-                if (aiSystemUser != null)
-                {
-                    return aiSystemUser.UserId;
-                }
-
-                // If no ai_system, get any admin user
-                var adminUser = _context.Users.FirstOrDefault(u => u.Role == "admin");
-                if (adminUser != null)
-                {
-                    return adminUser.UserId;
-                }
-
-                // If no admin user found, get first user
-                var anyUser = _context.Users.FirstOrDefault();
-                if (anyUser != null)
-                {
-                    return anyUser.UserId;
-                }
-
-                // If no user found, create ai_system user
-                var newAiUser = new User
-                {
-                    UserId = "ai_system",
-                    Username = "ai_system",
-                    Email = "ai@phygens.com",
-                    FullName = "AI System",
-                    Role = "admin",
-                    PasswordHash = "hashed_password_ai_system", // Simple hash for demo
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true
-                };
-
-                _context.Users.Add(newAiUser);
-                _context.SaveChanges(); // Save immediately to ensure user exists
-
-                return newAiUser.UserId;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Cannot create or find default user: {ex.Message}");
-            }
+            // ✅ LUÔN SỬ DỤNG ai_system - Đơn giản và đáng tin cậy
+            return "ai_system";
         }
 
         // GET: exams/history/{userId}
