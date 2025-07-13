@@ -30,6 +30,10 @@ namespace BE_Phygens.Models
         public DbSet<AdaptiveLearningData> AdaptiveLearningData { get; set; }
         public DbSet<SmartExamTemplate> SmartExamTemplates { get; set; }
         public DbSet<AiModelConfig> AiModelConfigs { get; set; }
+        public DbSet<EssayGradingRecord> EssayGradingRecords { get; set; }
+        
+        // Notification DbSet
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -303,6 +307,30 @@ namespace BE_Phygens.Models
                 .HasOne(emd => emd.Chapter)
                 .WithMany(c => c.ExamMatrixDetails)
                 .HasForeignKey(emd => emd.ChapterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Notification constraints and relationships
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.HasCheckConstraint("CK_Notification_Type", "type IN ('exam_created', 'exam_updated', 'exam_deleted', 'system', 'info', 'warning', 'error')");
+                entity.HasCheckConstraint("CK_Notification_Priority", "priority >= 1 AND priority <= 5");
+                
+                // Configure JSONB column
+                entity.Property(n => n.Data)
+                    .HasColumnName("data")
+                    .HasColumnType("jsonb");
+                
+                // Index for performance
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.CreatedAt);
+                entity.HasIndex(e => e.IsRead);
+                entity.HasIndex(e => e.Type);
+            });
+
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

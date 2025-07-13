@@ -498,32 +498,32 @@ Trả về JSON format:
             return suggestions;
         }
 
-        private List<EssayGradingCriteria> CreateDefaultGradingCriteria(string difficultyLevel)
+        private List<Dto.EssayGradingCriteria> CreateDefaultGradingCriteria(string difficultyLevel)
         {
-            return new List<EssayGradingCriteria>
+            return new List<Dto.EssayGradingCriteria>
             {
-                new EssayGradingCriteria
+                new Dto.EssayGradingCriteria
                 {
                     CriteriaName = "Hiểu biết khái niệm",
                     Description = "Thể hiện sự hiểu biết về khái niệm vật lý",
                     MaxPoints = 3,
                     Indicators = new List<string> { "Định nghĩa chính xác", "Giải thích rõ ràng", "Liên hệ với thực tế" }
                 },
-                new EssayGradingCriteria
+                new Dto.EssayGradingCriteria
                 {
                     CriteriaName = "Áp dụng công thức",
                     Description = "Sử dụng đúng công thức và tính toán",
                     MaxPoints = 3,
                     Indicators = new List<string> { "Chọn công thức đúng", "Thay số chính xác", "Đơn vị đúng" }
                 },
-                new EssayGradingCriteria
+                new Dto.EssayGradingCriteria
                 {
                     CriteriaName = "Giải thích logic",
                     Description = "Trình bày có logic và mạch lạc",
                     MaxPoints = 2,
                     Indicators = new List<string> { "Trình tự hợp lý", "Liên kết các ý", "Dễ hiểu" }
                 },
-                new EssayGradingCriteria
+                new Dto.EssayGradingCriteria
                 {
                     CriteriaName = "Kết luận",
                     Description = "Đưa ra kết luận chính xác",
