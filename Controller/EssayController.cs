@@ -355,7 +355,7 @@ namespace BE_Phygens.Controllers
                     // Essay specific fields
                     MaxWords = 500, // Default values - có thể lưu trong metadata
                     MinWords = 50,
-                    GradingCriteria = new List<EssayGradingCriteria>() // Load from metadata if available
+                    GradingCriteria = new List<Dto.EssayGradingCriteria>() // Load from metadata if available
                 };
 
                 return Ok(new ApiResponse<EssayQuestionDto>

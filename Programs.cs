@@ -132,6 +132,8 @@ namespace BE_Phygens
             // Register custom services
             builder.Services.AddScoped<IJwtService, JwtService>();
             builder.Services.AddScoped<IAutoGradingService, AutoGradingService>();
+            builder.Services.AddScoped<IEssayGradingService, EssayGradingService>();
+            builder.Services.AddScoped<INotificationService, NotificationService>();
             
             // Add HttpClient for AI services
             builder.Services.AddHttpClient();

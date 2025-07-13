@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using BE_Phygens.Services;
 
 namespace BE_Phygens.Controllers
 {
@@ -16,10 +17,12 @@ namespace BE_Phygens.Controllers
     public class ExamsController : ControllerBase
     {
         private readonly PhygensContext _context;
+        private readonly INotificationService _notificationService;
 
-        public ExamsController(PhygensContext context)
+        public ExamsController(PhygensContext context, INotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         private static readonly string[] ValidExamTypes = { "15p", "1tiet", "cuoiky", "ai_generated", "smart_exam", "adaptive" };
@@ -229,7 +232,7 @@ namespace BE_Phygens.Controllers
                 }
             }
 
-            // Validate questions exist if provided and create placeholders for AI questions
+            // Create questions từ mini editor hoặc validate existing questions
             if (examDto.Questions != null && examDto.Questions.Any())
             {
                 var questionIds = examDto.Questions.Select(q => q.QuestionId).Distinct().ToList();
@@ -241,36 +244,70 @@ namespace BE_Phygens.Controllers
                 var missingQuestionIds = questionIds.Except(existingQuestions).ToList();
                 if (missingQuestionIds.Any())
                 {
-                    Console.WriteLine($"⚠️ Creating {missingQuestionIds.Count} placeholder questions for AI-generated content...");
+                    Console.WriteLine($"⚠️ Creating {missingQuestionIds.Count} questions from mini editor...");
                     
-                    // Create placeholder questions for AI-generated ones
-                    foreach (var missingId in missingQuestionIds)
+                    // Create questions from mini editor data
+                    foreach (var questionDto in examDto.Questions.Where(q => missingQuestionIds.Contains(q.QuestionId)))
                     {
-                        // Check if it's UUID format (AI-generated)
-                        if (Guid.TryParse(missingId, out _))
+                        if (questionDto.QuestionData != null)
                         {
-                            var placeholderQuestion = new Question
+                            // Tạo question từ mini editor
+                            var question = new Question
                             {
-                                QuestionId = missingId,
-                                QuestionText = "[AI Generated Question - Content loaded from frontend]",
-                                QuestionType = "multiple_choice",
-                                DifficultyLevel = "medium",
-                                CreatedBy = "ai_system",
+                                QuestionId = questionDto.QuestionId,
+                                QuestionText = questionDto.QuestionData.QuestionText,
+                                QuestionType = questionDto.QuestionData.QuestionType,
+                                DifficultyLevel = questionDto.QuestionData.DifficultyLevel,
+                                CreatedBy = createdBy,
                                 CreatedAt = DateTime.UtcNow,
                                 TopicId = "TOPIC_001", // Default topic
                                 IsActive = true
                             };
                             
-                            _context.Questions.Add(placeholderQuestion);
-                            Console.WriteLine($"   ✅ Created placeholder: {missingId}");
+                            _context.Questions.Add(question);
+                            Console.WriteLine($"   ✅ Created question: {questionDto.QuestionId}");
+
+                            // Tạo answer choices nếu có
+                            if (questionDto.QuestionData.AnswerChoices != null && questionDto.QuestionData.AnswerChoices.Any())
+                            {
+                                var displayOrder = 1;
+                                foreach (var choice in questionDto.QuestionData.AnswerChoices)
+                                {
+                                    var answerChoice = new AnswerChoice
+                                    {
+                                        ChoiceId = Guid.NewGuid().ToString(),
+                                        QuestionId = questionDto.QuestionId,
+                                        ChoiceLabel = choice.ChoiceLabel,
+                                        ChoiceText = choice.ChoiceText,
+                                        IsCorrect = choice.IsCorrect,
+                                        DisplayOrder = displayOrder++
+                                    };
+                                    
+                                    _context.AnswerChoices.Add(answerChoice);
+                                }
+                            }
                         }
                         else
                         {
-                            Console.WriteLine($"   ❌ Skipping non-UUID question: {missingId}");
+                            // Fallback: tạo placeholder nếu không có question data
+                            var placeholderQuestion = new Question
+                            {
+                                QuestionId = questionDto.QuestionId,
+                                QuestionText = "[Question content not provided]",
+                                QuestionType = "multiple_choice",
+                                DifficultyLevel = "medium",
+                                CreatedBy = createdBy,
+                                CreatedAt = DateTime.UtcNow,
+                                TopicId = "TOPIC_001",
+                                IsActive = true
+                            };
+                            
+                            _context.Questions.Add(placeholderQuestion);
+                            Console.WriteLine($"   ⚠️ Created placeholder: {questionDto.QuestionId}");
                         }
                     }
                     
-                    // Save placeholder questions first
+                    // Save questions first
                     await _context.SaveChangesAsync();
                 }
             }
@@ -338,6 +375,13 @@ namespace BE_Phygens.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // Create notification for exam creation
+            await _notificationService.CreateExamNotificationAsync(
+                exam.ExamName,
+                "exam_created",
+                new { examId = exam.ExamId, examType = exam.ExamType }
+            );
 
             return Ok(new
             {
@@ -505,8 +549,139 @@ namespace BE_Phygens.Controllers
             var questions = new List<ExamQuestion>();
             int order = 1;
 
-            // ✅ NEW: Handle chapterId + questionCount format (from frontend)
-            if (generateDto.ChapterId.HasValue && generateDto.QuestionCount.HasValue)
+            // ✅ Handle multi-chapter format (NEW)
+            if (generateDto.IsMultiChapter && generateDto.ChapterAllocations != null && generateDto.ChapterAllocations.Any())
+            {
+                foreach (var allocation in generateDto.ChapterAllocations)
+                {
+                    var chapter = await _context.Chapters.FindAsync(allocation.ChapterId);
+                    if (chapter != null)
+                    {
+                        // Try to get questions from database first
+                        var dbQuestions = await _context.Questions
+                            .Where(q => q.ChapterId == allocation.ChapterId && q.IsActive)
+                            .OrderBy(x => Guid.NewGuid()) // Random order
+                            .Take(allocation.QuestionCount)
+                            .ToListAsync();
+
+                        foreach (var question in dbQuestions)
+                        {
+                            questions.Add(new ExamQuestion
+                            {
+                                ExamQuestionId = Guid.NewGuid().ToString(),
+                                ExamId = exam.ExamId,
+                                QuestionId = question.QuestionId,
+                                QuestionOrder = order++,
+                                PointsWeight = 1,
+                                AddedAt = DateTime.UtcNow
+                            });
+                        }
+
+                        // If not enough questions from DB, create placeholder questions
+                        int remaining = allocation.QuestionCount - dbQuestions.Count;
+                        if (remaining > 0)
+                        {
+                            var placeholderQuestions = new List<Question>();
+                            
+                            // Calculate how many of each type to create
+                            int multipleChoiceCount = 0;
+                            int essayCount = 0;
+                            
+                            if (generateDto.IncludeMultipleChoice && generateDto.IncludeEssay)
+                            {
+                                decimal mcPercentage = generateDto.CustomRatio ? 
+                                    (decimal)generateDto.MultipleChoicePercentage / 100 : 0.7m;
+                                multipleChoiceCount = (int)(remaining * mcPercentage);
+                                essayCount = remaining - multipleChoiceCount;
+                            }
+                            else if (generateDto.IncludeMultipleChoice)
+                            {
+                                multipleChoiceCount = remaining;
+                            }
+                            else if (generateDto.IncludeEssay)
+                            {
+                                essayCount = remaining;
+                            }
+                            else
+                            {
+                                multipleChoiceCount = remaining;
+                            }
+                            
+                            int questionCounter = 1;
+                            
+                            // Create multiple choice questions
+                            for (int i = 0; i < multipleChoiceCount; i++)
+                            {
+                                var placeholderQuestion = new Question
+                                {
+                                    QuestionId = Guid.NewGuid().ToString(),
+                                    QuestionText = $"[AI Generated Multi-Chapter Question {questionCounter}] - {chapter.ChapterName}",
+                                    QuestionType = "multiple_choice",
+                                    DifficultyLevel = allocation.DifficultyLevel,
+                                    CreatedBy = createdBy,
+                                    CreatedAt = DateTime.UtcNow,
+                                    TopicId = "TOPIC_001",
+                                    ChapterId = allocation.ChapterId,
+                                    IsActive = true,
+                                    AiGenerated = true
+                                };
+
+                                _context.Questions.Add(placeholderQuestion);
+                                placeholderQuestions.Add(placeholderQuestion);
+                                questionCounter++;
+                            }
+                            
+                            // Create essay questions
+                            for (int i = 0; i < essayCount; i++)
+                            {
+                                var placeholderQuestion = new Question
+                                {
+                                    QuestionId = Guid.NewGuid().ToString(),
+                                    QuestionText = $"[AI Generated Essay Question {questionCounter}] - {chapter.ChapterName}",
+                                    QuestionType = "essay",
+                                    DifficultyLevel = allocation.DifficultyLevel,
+                                    CreatedBy = createdBy,
+                                    CreatedAt = DateTime.UtcNow,
+                                    TopicId = "TOPIC_001",
+                                    ChapterId = allocation.ChapterId,
+                                    IsActive = true,
+                                    AiGenerated = true,
+                                    AiGenerationMetadata = JsonSerializer.Serialize(new {
+                                        questionType = "essay",
+                                        minWords = 50,
+                                        maxWords = 300,
+                                        essayStyle = "analytical",
+                                        generatedAt = DateTime.UtcNow
+                                    })
+                                };
+
+                                _context.Questions.Add(placeholderQuestion);
+                                placeholderQuestions.Add(placeholderQuestion);
+                                questionCounter++;
+                            }
+                            
+                            // Save placeholder questions to database first
+                            await _context.SaveChangesAsync();
+                            
+                            // Now create ExamQuestions with valid QuestionIds
+                            foreach (var placeholderQuestion in placeholderQuestions)
+                            {
+                                questions.Add(new ExamQuestion
+                                {
+                                    ExamQuestionId = Guid.NewGuid().ToString(),
+                                    ExamId = exam.ExamId,
+                                    QuestionId = placeholderQuestion.QuestionId,
+                                    QuestionOrder = order++,
+                                    PointsWeight = 1,
+                                    AddedAt = DateTime.UtcNow
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            // ✅ Handle single chapter + questionCount format (from frontend)  
+            else if (generateDto.ChapterId.HasValue && generateDto.QuestionCount.HasValue)
             {
                 var chapter = await _context.Chapters.FindAsync(generateDto.ChapterId.Value);
                 if (chapter != null)
@@ -708,7 +883,34 @@ namespace BE_Phygens.Controllers
             _context.ExamQuestions.AddRange(questions);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetExamById), new { id = exam.ExamId }, exam);
+            // Create notification for AI exam generation
+            await _notificationService.CreateExamNotificationAsync(
+                exam.ExamName,
+                "exam_created",
+                new { examId = exam.ExamId, examType = exam.ExamType, questionCount = questions.Count, isAiGenerated = true }
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = $"AI exam '{exam.ExamName}' generated successfully with {questions.Count} questions",
+                data = new
+                {
+                    examId = exam.ExamId,
+                    examName = exam.ExamName,
+                    description = exam.Description,
+                    durationMinutes = exam.DurationMinutes,
+                    examType = exam.ExamType,
+                    createdAt = exam.CreatedAt,
+                    questionCount = questions.Count,
+                    questions = questions.Select(q => new
+                    {
+                        questionId = q.QuestionId,
+                        questionOrder = q.QuestionOrder,
+                        pointsWeight = q.PointsWeight
+                    }).ToList()
+                }
+            });
         }
 
         private T GetEssayMetadataProperty<T>(string? jsonMetadata, string propertyName)

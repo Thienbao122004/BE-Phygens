@@ -46,6 +46,19 @@ namespace BE_Phygens.Dto
         // Custom ratio support
         public bool CustomRatio { get; set; } = false;
         public int MultipleChoicePercentage { get; set; } = 70;
+        
+        // NEW: Multi-chapter support
+        public bool IsMultiChapter { get; set; } = false;
+        public List<int> ChapterIds { get; set; } = new();
+        public List<ChapterQuestionAllocation> ChapterAllocations { get; set; } = new();
+        public string ExamScope { get; set; } = "single"; // "single" or "comprehensive"
+    }
+
+    public class ChapterQuestionAllocation
+    {
+        public int ChapterId { get; set; }
+        public int QuestionCount { get; set; }
+        public string DifficultyLevel { get; set; } = "medium";
     }
 
     public class ExamMatrixDto
@@ -61,6 +74,22 @@ namespace BE_Phygens.Dto
         public string QuestionId { get; set; } = string.Empty;
         public int QuestionOrder { get; set; }
         public decimal PointsWeight { get; set; }
+        public QuestionCreateDto? QuestionData { get; set; } // Thêm để nhận question data từ mini editor
+    }
+
+    public class QuestionCreateDto
+    {
+        public string QuestionText { get; set; } = string.Empty;
+        public string QuestionType { get; set; } = "multiple_choice";
+        public string DifficultyLevel { get; set; } = "medium";
+        public List<AnswerChoiceCreateDto> AnswerChoices { get; set; } = new();
+    }
+
+    public class AnswerChoiceCreateDto
+    {
+        public string ChoiceLabel { get; set; } = string.Empty;
+        public string ChoiceText { get; set; } = string.Empty;
+        public bool IsCorrect { get; set; }
     }
 
     public class ExamDetailsDto // Dùng để trả về dữ liệu exam chi tiết - renamed from ExamDto

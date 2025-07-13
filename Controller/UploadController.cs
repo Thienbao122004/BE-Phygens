@@ -280,5 +280,80 @@ namespace BE_Phygens.Controllers
                 return StatusCode(500, new { error = "Lỗi liệt kê files" });
             }
         }
+
+        /// <summary>
+        /// 🌤️ Delete image from Cloudinary
+        /// </summary>
+        [HttpDelete("cloudinary/delete")]
+        [AllowAnonymous]
+        public async Task<IActionResult> DeleteFromCloudinary([FromBody] CloudinaryDeleteRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.PublicId))
+                {
+                    return BadRequest(new { error = "PublicId is required" });
+                }
+
+                // Get Cloudinary config from environment
+                var cloudName = _configuration["Cloudinary:CloudName"];
+                var apiKey = _configuration["Cloudinary:ApiKey"];
+                var apiSecret = _configuration["Cloudinary:ApiSecret"];
+
+                if (string.IsNullOrEmpty(cloudName) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
+                {
+                    return BadRequest(new { error = "Cloudinary configuration not found" });
+                }
+
+                // Create timestamp and signature for authentication
+                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+                var stringToSign = $"public_id={request.PublicId}&timestamp={timestamp}{apiSecret}";
+                var signature = ComputeSha1Hash(stringToSign);
+
+                // Prepare form data
+                var formData = new List<KeyValuePair<string, string>>
+                {
+                    new("public_id", request.PublicId),
+                    new("timestamp", timestamp),
+                    new("api_key", apiKey),
+                    new("signature", signature)
+                };
+
+                var formContent = new FormUrlEncodedContent(formData);
+
+                // Call Cloudinary delete API
+                var deleteUrl = $"https://api.cloudinary.com/v1_1/{cloudName}/image/destroy";
+                var response = await _httpClient.PostAsync(deleteUrl, formContent);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    return StatusCode(500, new { error = $"Cloudinary delete failed: {errorContent}" });
+                }
+
+                var result = await response.Content.ReadAsStringAsync();
+                return Ok(new { success = true, message = "Image deleted successfully", result });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting image from Cloudinary");
+                return StatusCode(500, new { error = "Failed to delete image" });
+            }
+        }
+
+        /// <summary>
+        /// 🔐 Generate SHA1 hash for Cloudinary signature
+        /// </summary>
+        private static string ComputeSha1Hash(string input)
+        {
+            using var sha1 = System.Security.Cryptography.SHA1.Create();
+            var hash = sha1.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
+            return Convert.ToHexString(hash).ToLower();
+        }
+    }
+
+    public class CloudinaryDeleteRequest
+    {
+        public string PublicId { get; set; } = "";
     }
 } 
