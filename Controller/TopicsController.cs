@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BE_Phygens.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("topics")]
     public class TopicsController : ControllerBase
     {
         private readonly PhygensContext _context;
@@ -278,7 +278,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: topics/grade/{gradeLevel} - Convenience endpoint
-        [HttpGet("grade/{gradeLevel}")]
+        [HttpGet("grades/{gradeLevel}")]
         public async Task<IActionResult> GetTopicsByGrade(string gradeLevel)
         {
             try

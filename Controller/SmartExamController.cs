@@ -348,7 +348,7 @@ namespace BE_Phygens.Controllers
         }
 
         // POST: smart-exams/matrices/{matrixId}/generate
-        [HttpPost("matrices/{matrixId}/generate")]
+        [HttpPost("matrices/{matrixId}/generations")]
         public async Task<IActionResult> GenerateExamFromMatrix(string matrixId)
         {
             try

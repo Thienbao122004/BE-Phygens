@@ -29,7 +29,7 @@ namespace BE_Phygens.Controllers
         /// Generate AI question using real AI service (OpenAI/Gemini)
         /// POST: questions/ai-generated
         /// </summary>
-        [HttpPost("ai-generated")]
+        [HttpPost("ai-generations")]
         public async Task<IActionResult> GenerateQuestion([FromBody] GenerateQuestionRequest request)
         {
             try
@@ -139,7 +139,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Generate multiple questions in batch
         /// </summary>
-        [HttpPost("batch")]
+        [HttpPost("batches")]
         public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GenerateBatchQuestions([FromBody] BatchGenerateRequest request)
         {
             try
@@ -287,7 +287,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Validate question quality using AI
         /// </summary>
-        [HttpGet("{questionId}/validation")]
+        [HttpGet("{questionId}/validations")]
         public async Task<ActionResult<ApiResponse<QuestionValidationDto>>> ValidateQuestion(string questionId)
         {
             try
@@ -326,7 +326,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Test AI connection and capabilities
         /// </summary>
-        [HttpGet("health/ai-connection")]
+        [HttpGet("health/ai-connections")]
         [AllowAnonymous]
         public async Task<ActionResult<ApiResponse<object>>> TestAIConnection()
         {
@@ -746,7 +746,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        [HttpGet("debug/database-status")]
+        [HttpGet("debug/database-statuses")]
         [AllowAnonymous]
         public async Task<ActionResult<ApiResponse<object>>> GetDatabaseStatus()
         {

@@ -30,7 +30,7 @@ namespace BE_Phygens.Controllers
         /// Tạo câu hỏi tự luận bằng AI
         /// POST: api/essay/generate
         /// </summary>
-        [HttpPost("generate")]
+        [HttpPost("generates")]
         public async Task<ActionResult<ApiResponse<EssayQuestionDto>>> GenerateEssayQuestion([FromBody] GenerateEssayQuestionRequest request)
         {
             try
@@ -81,7 +81,7 @@ namespace BE_Phygens.Controllers
         /// Chấm điểm bài tự luận
         /// POST: api/essay/grade
         /// </summary>
-        [HttpPost("grade")]
+        [HttpPost("grades")]
         public async Task<ActionResult<ApiResponse<EssayGradingResultDto>>> GradeEssay([FromBody] EssayAnswerSubmissionDto submission)
         {
             try
@@ -126,7 +126,7 @@ namespace BE_Phygens.Controllers
         /// Chấm điểm hàng loạt bài tự luận
         /// POST: api/essay/batch-grade
         /// </summary>
-        [HttpPost("batch-grade")]
+        [HttpPost("grades-batch")]
         public async Task<ActionResult<ApiResponse<List<EssayGradingResultDto>>>> BatchGradeEssays([FromBody] EssayBatchGradingRequest request)
         {
             try
@@ -157,7 +157,7 @@ namespace BE_Phygens.Controllers
         /// Phân tích bài viết tự luận
         /// POST: api/essay/analyze
         /// </summary>
-        [HttpPost("analyze")]
+        [HttpPost("analyses")]
         public async Task<ActionResult<ApiResponse<EssayAnalysisDto>>> AnalyzeEssay([FromBody] AnalyzeEssayRequest request)
         {
             try
@@ -186,7 +186,7 @@ namespace BE_Phygens.Controllers
         /// Tạo phản hồi cho bài tự luận
         /// POST: api/essay/feedback
         /// </summary>
-        [HttpPost("feedback")]
+        [HttpPost("feedbacks")]
         public async Task<ActionResult<ApiResponse<string>>> GenerateFeedback([FromBody] GenerateFeedbackRequest request)
         {
             try
@@ -218,7 +218,7 @@ namespace BE_Phygens.Controllers
         /// Validate câu trả lời tự luận
         /// POST: api/essay/validate
         /// </summary>
-        [HttpPost("validate")]
+        [HttpPost("validations")]
         public async Task<ActionResult<ApiResponse<bool>>> ValidateEssayAnswer([FromBody] ValidateEssayRequest request)
         {
             try

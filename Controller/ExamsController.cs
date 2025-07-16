@@ -45,19 +45,24 @@ namespace BE_Phygens.Controllers
 
         // GET: exams
         [HttpGet]
-        public async Task<IActionResult> GetAllExams([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        public async Task<IActionResult> GetAllExams([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string sortBy = "createdAt", [FromQuery] string sortDirection = "desc")
         {
             try
             {
                 // Test database connection first
                 await _context.Database.CanConnectAsync();
-                
+
                 var query = _context.Exams
                     .Include(e => e.ExamQuestions)
                     .ThenInclude(eq => eq.Question)
                     .ThenInclude(q => q.Topic)
                     .AsNoTracking();
-
+                if (sortBy == "createdAt")
+                {
+                    query = sortDirection == "asc"
+                        ? query.OrderBy(e => e.CreatedAt)
+                        : query.OrderByDescending(e => e.CreatedAt);
+                }
                 // Get total count
                 var totalCount = await query.CountAsync();
 
@@ -66,7 +71,7 @@ namespace BE_Phygens.Controllers
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .ToListAsync();
-            
+
                 var examDtos = exams.Select(e => new ExamDetailsDto
                 {
                     ExamId = e.ExamId,
@@ -113,11 +118,12 @@ namespace BE_Phygens.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { 
+                return StatusCode(500, new
+                {
                     success = false,
                     message = "Internal server error",
                     error = ex.Message,
-                    details = ex.InnerException?.Message 
+                    details = ex.InnerException?.Message
                 });
             }
         }
@@ -126,7 +132,7 @@ namespace BE_Phygens.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetExamById(string id)
         {
-            try 
+            try
             {
                 var exam = await _context.Exams
                     .Include(e => e.ExamQuestions)
@@ -218,16 +224,17 @@ namespace BE_Phygens.Controllers
             if (!string.IsNullOrEmpty(examDto.ExamName))
             {
                 var existingExam = await _context.Exams
-                    .Where(e => e.ExamName == examDto.ExamName && 
+                    .Where(e => e.ExamName == examDto.ExamName &&
                                e.CreatedBy == createdBy &&
                                e.ExamType == examType)
                     .FirstOrDefaultAsync();
 
                 if (existingExam != null)
                 {
-                    return BadRequest(new { 
-                        error = "Exam with same name and configuration already exists", 
-                        existingExamId = existingExam.ExamId 
+                    return BadRequest(new
+                    {
+                        error = "Exam with same name and configuration already exists",
+                        existingExamId = existingExam.ExamId
                     });
                 }
             }
@@ -240,12 +247,12 @@ namespace BE_Phygens.Controllers
                     .Where(q => questionIds.Contains(q.QuestionId))
                     .Select(q => q.QuestionId)
                     .ToListAsync();
-                
+
                 var missingQuestionIds = questionIds.Except(existingQuestions).ToList();
                 if (missingQuestionIds.Any())
                 {
                     Console.WriteLine($"⚠️ Creating {missingQuestionIds.Count} questions from mini editor...");
-                    
+
                     // Create questions from mini editor data
                     foreach (var questionDto in examDto.Questions.Where(q => missingQuestionIds.Contains(q.QuestionId)))
                     {
@@ -263,7 +270,7 @@ namespace BE_Phygens.Controllers
                                 TopicId = "TOPIC_001", // Default topic
                                 IsActive = true
                             };
-                            
+
                             _context.Questions.Add(question);
                             Console.WriteLine($"   ✅ Created question: {questionDto.QuestionId}");
 
@@ -282,7 +289,7 @@ namespace BE_Phygens.Controllers
                                         IsCorrect = choice.IsCorrect,
                                         DisplayOrder = displayOrder++
                                     };
-                                    
+
                                     _context.AnswerChoices.Add(answerChoice);
                                 }
                             }
@@ -301,12 +308,12 @@ namespace BE_Phygens.Controllers
                                 TopicId = "TOPIC_001",
                                 IsActive = true
                             };
-                            
+
                             _context.Questions.Add(placeholderQuestion);
                             Console.WriteLine($"   ⚠️ Created placeholder: {questionDto.QuestionId}");
                         }
                     }
-                    
+
                     // Save questions first
                     await _context.SaveChangesAsync();
                 }
@@ -318,10 +325,10 @@ namespace BE_Phygens.Controllers
                 ExamName = examDto.ExamName,
                 Description = examDto.Description,
                 DurationMinutes = examDto.DurationMinutes > 0 ? examDto.DurationMinutes : 45, // ✅ Default 45 phút nếu <= 0
-                ExamType = examType, 
-                CreatedBy = createdBy, 
-                IsPublished = false, 
-                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam", 
+                ExamType = examType,
+                CreatedBy = createdBy,
+                IsPublished = false,
+                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam",
                 CreatedAt = DateTime.UtcNow,
                 AiGenerationConfig = ConvertToJsonString(examDto.AiGenerationConfig)
             };
@@ -418,13 +425,14 @@ namespace BE_Phygens.Controllers
                     .Where(q => questionIds.Contains(q.QuestionId))
                     .Select(q => q.QuestionId)
                     .ToListAsync();
-                
+
                 var missingQuestionIds = questionIds.Except(existingQuestions).ToList();
                 if (missingQuestionIds.Any())
                 {
-                    return BadRequest(new { 
-                        error = "Some questions do not exist", 
-                        missingQuestionIds = missingQuestionIds 
+                    return BadRequest(new
+                    {
+                        error = "Some questions do not exist",
+                        missingQuestionIds = missingQuestionIds
                     });
                 }
             }
@@ -461,7 +469,7 @@ namespace BE_Phygens.Controllers
             }
 
             await _context.SaveChangesAsync();
-            
+
             return Ok(new
             {
                 success = true,
@@ -485,7 +493,7 @@ namespace BE_Phygens.Controllers
             try
             {
                 var exam = await _context.Exams.FindAsync(id);
-                if (exam == null) 
+                if (exam == null)
                 {
                     return NotFound(new
                     {
@@ -502,7 +510,7 @@ namespace BE_Phygens.Controllers
 
                 _context.Exams.Remove(exam);
                 await _context.SaveChangesAsync();
-                
+
                 return Ok(new
                 {
                     success = true,
@@ -521,25 +529,25 @@ namespace BE_Phygens.Controllers
         }
 
         // POST: exams/generate
-        [HttpPost("generate")]
+        [HttpPost("generations")]
         public async Task<IActionResult> GenerateExam([FromBody] ExamGenerateDto generateDto)
         {
             // Validate ExamType to ensure it matches database constraint
             var examType = ValidateExamType(generateDto.ExamType);
-            
+
             // Get or create default user if CreatedBy is not provided
             var createdBy = !string.IsNullOrEmpty(generateDto.CreatedBy) ? generateDto.CreatedBy : GetOrCreateDefaultUser();
-            
+
             var exam = new Exam
             {
                 ExamId = Guid.NewGuid().ToString(),
                 ExamName = generateDto.ExamName,
                 Description = generateDto.Description,
                 DurationMinutes = generateDto.DurationMinutes > 0 ? generateDto.DurationMinutes : 45, // ✅ Default 45 phút nếu <= 0
-                ExamType = examType, 
+                ExamType = examType,
                 CreatedBy = createdBy, // ✅ Sử dụng validated CreatedBy
                 IsPublished = false,
-                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam", 
+                IsAiGenerated = examType == "ai_generated" || examType == "smart_exam",
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -582,14 +590,14 @@ namespace BE_Phygens.Controllers
                         if (remaining > 0)
                         {
                             var placeholderQuestions = new List<Question>();
-                            
+
                             // Calculate how many of each type to create
                             int multipleChoiceCount = 0;
                             int essayCount = 0;
-                            
+
                             if (generateDto.IncludeMultipleChoice && generateDto.IncludeEssay)
                             {
-                                decimal mcPercentage = generateDto.CustomRatio ? 
+                                decimal mcPercentage = generateDto.CustomRatio ?
                                     (decimal)generateDto.MultipleChoicePercentage / 100 : 0.7m;
                                 multipleChoiceCount = (int)(remaining * mcPercentage);
                                 essayCount = remaining - multipleChoiceCount;
@@ -606,9 +614,9 @@ namespace BE_Phygens.Controllers
                             {
                                 multipleChoiceCount = remaining;
                             }
-                            
+
                             int questionCounter = 1;
-                            
+
                             // Create multiple choice questions
                             for (int i = 0; i < multipleChoiceCount; i++)
                             {
@@ -630,7 +638,7 @@ namespace BE_Phygens.Controllers
                                 placeholderQuestions.Add(placeholderQuestion);
                                 questionCounter++;
                             }
-                            
+
                             // Create essay questions
                             for (int i = 0; i < essayCount; i++)
                             {
@@ -646,7 +654,8 @@ namespace BE_Phygens.Controllers
                                     ChapterId = allocation.ChapterId,
                                     IsActive = true,
                                     AiGenerated = true,
-                                    AiGenerationMetadata = JsonSerializer.Serialize(new {
+                                    AiGenerationMetadata = JsonSerializer.Serialize(new
+                                    {
                                         questionType = "essay",
                                         minWords = 50,
                                         maxWords = 300,
@@ -659,10 +668,10 @@ namespace BE_Phygens.Controllers
                                 placeholderQuestions.Add(placeholderQuestion);
                                 questionCounter++;
                             }
-                            
+
                             // Save placeholder questions to database first
                             await _context.SaveChangesAsync();
-                            
+
                             // Now create ExamQuestions with valid QuestionIds
                             foreach (var placeholderQuestion in placeholderQuestions)
                             {
@@ -712,20 +721,20 @@ namespace BE_Phygens.Controllers
                     {
                         // ✅ Create placeholder questions in DB first, then add to exam
                         var placeholderQuestions = new List<Question>();
-                        
+
                         // Calculate how many of each type to create
                         int multipleChoiceCount = 0;
                         int essayCount = 0;
-                        
+
                         if (generateDto.IncludeMultipleChoice && generateDto.IncludeEssay)
                         {
                             // Use custom ratio if specified, otherwise default 70% multiple choice
-                            decimal mcPercentage = generateDto.CustomRatio ? 
+                            decimal mcPercentage = generateDto.CustomRatio ?
                                 (decimal)generateDto.MultipleChoicePercentage / 100 : 0.7m;
                             multipleChoiceCount = (int)(remaining * mcPercentage);
                             essayCount = remaining - multipleChoiceCount;
-                            
-                            Console.WriteLine($"📊 Custom ratio: MC={generateDto.MultipleChoicePercentage}%, Essay={100-generateDto.MultipleChoicePercentage}%");
+
+                            Console.WriteLine($"📊 Custom ratio: MC={generateDto.MultipleChoicePercentage}%, Essay={100 - generateDto.MultipleChoicePercentage}%");
                         }
                         else if (generateDto.IncludeMultipleChoice)
                         {
@@ -740,9 +749,9 @@ namespace BE_Phygens.Controllers
                             // Default fallback - create multiple choice
                             multipleChoiceCount = remaining;
                         }
-                        
+
                         int questionCounter = 1;
-                        
+
                         // Create multiple choice questions
                         for (int i = 0; i < multipleChoiceCount; i++)
                         {
@@ -764,7 +773,7 @@ namespace BE_Phygens.Controllers
                             placeholderQuestions.Add(placeholderQuestion);
                             questionCounter++;
                         }
-                        
+
                         // Create essay questions
                         for (int i = 0; i < essayCount; i++)
                         {
@@ -781,7 +790,8 @@ namespace BE_Phygens.Controllers
                                 IsActive = true,
                                 AiGenerated = true,
                                 // Add essay-specific metadata
-                                AiGenerationMetadata = JsonSerializer.Serialize(new {
+                                AiGenerationMetadata = JsonSerializer.Serialize(new
+                                {
                                     questionType = "essay",
                                     minWords = 50,
                                     maxWords = 300,
@@ -794,10 +804,10 @@ namespace BE_Phygens.Controllers
                             placeholderQuestions.Add(placeholderQuestion);
                             questionCounter++;
                         }
-                        
+
                         // ✅ Save placeholder questions to database first
                         await _context.SaveChangesAsync();
-                        
+
                         // ✅ Now create ExamQuestions with valid QuestionIds
                         foreach (var placeholderQuestion in placeholderQuestions)
                         {
@@ -942,8 +952,8 @@ namespace BE_Phygens.Controllers
 
         // GET: exams/history/{userId}
         [Authorize]
-        [HttpGet("history/{userId}")]
-        public async Task<IActionResult> GetUserExamHistory(string userId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        [HttpGet("histories/{userId}")]
+        public async Task<IActionResult> GetUserExamHistory(string userId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
             try
             {
@@ -968,13 +978,13 @@ namespace BE_Phygens.Controllers
                         subject = a.Exam.ExamName,
                         correct = a.StudentAnswers.Count(sa => sa.IsCorrect),
                         totalQuestions = a.StudentAnswers.Count,
-                        time = a.EndTime.HasValue 
+                        time = a.EndTime.HasValue
                             ? $"{(a.EndTime.Value - a.StartTime).TotalMinutes:0} phút"
                             : "Đang làm bài",
                         date = a.StartTime.ToString("HH:mm dd/MM/yyyy"),
-                        difficulty = a.Exam.ExamType == "15p" ? "Dễ" : 
+                        difficulty = a.Exam.ExamType == "15p" ? "Dễ" :
                                    a.Exam.ExamType == "1tiet" ? "Trung bình" : "Khó",
-                        accuracy = a.StudentAnswers.Any() 
+                        accuracy = a.StudentAnswers.Any()
                             ? (decimal)a.StudentAnswers.Count(sa => sa.IsCorrect) / a.StudentAnswers.Count * 100
                             : 0
                     })

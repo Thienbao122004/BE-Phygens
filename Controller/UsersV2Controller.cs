@@ -365,7 +365,7 @@ namespace BE_Phygens.Controllers
         /// </summary>
         /// <param name="request">Password change data</param>
         /// <returns>Success message</returns>
-        [HttpPut("me/password")]
+        [HttpPut("me/passwords")]
         [Authorize]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]

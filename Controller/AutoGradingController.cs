@@ -26,7 +26,7 @@ namespace BE_Phygens.Controller
         /// <summary>
         /// POST: auto-grading/questions/grade - Chấm điểm một câu hỏi đơn lẻ
         /// </summary>
-        [HttpPost("questions/grade")]
+        [HttpPost("questions/grades")]
         public async Task<IActionResult> GradeSingleQuestion([FromBody] GradeQuestionRequest request)
         {
             try
@@ -75,7 +75,7 @@ namespace BE_Phygens.Controller
         /// <summary>
         /// POST: auto-grading/exams/grade - Chấm điểm toàn bộ bài thi
         /// </summary>
-        [HttpPost("exams/grade")]
+        [HttpPost("exams/grades")]
         public async Task<IActionResult> GradeExam([FromBody] GradeExamRequest request)
         {
             try
@@ -162,7 +162,7 @@ namespace BE_Phygens.Controller
         /// <summary>
         /// POST: auto-grading/attempts/{attemptId}/grade - Chấm điểm dựa trên attempt có sẵn
         /// </summary>
-        [HttpPost("attempts/{attemptId}/grade")]
+        [HttpPost("attempts/{attemptId}/grades")]
         public async Task<IActionResult> GradeExamAttempt(string attemptId)
         {
             try
@@ -416,7 +416,7 @@ namespace BE_Phygens.Controller
         /// <summary>
         /// POST: auto-grading/questions/batch-grade - Chấm điểm nhiều câu hỏi cùng lúc
         /// </summary>
-        [HttpPost("questions/batch-grade")]
+        [HttpPost("questions/grades-batch")]
         public async Task<IActionResult> BatchGradeQuestions([FromBody] BatchGradeRequest request)
         {
             try

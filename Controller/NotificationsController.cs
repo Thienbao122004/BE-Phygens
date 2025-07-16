@@ -104,7 +104,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: notifications/unread-count - Get unread notifications count
-        [HttpGet("unread-count")]
+        [HttpGet("unread-counts")]
         public async Task<IActionResult> GetUnreadCount([FromQuery] string? userId = null)
         {
             try
@@ -190,7 +190,7 @@ namespace BE_Phygens.Controllers
         }
 
         // PUT: notifications/{id}/mark-read - Mark notification as read
-        [HttpPut("{id}/mark-read")]
+        [HttpPut("{id}/read-status")]
         public async Task<IActionResult> MarkAsRead(string id, [FromQuery] string? userId = null)
         {
             try

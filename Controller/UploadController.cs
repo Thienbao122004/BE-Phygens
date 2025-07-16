@@ -247,7 +247,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// List uploaded files in folder
         /// </summary>
-        [HttpGet("list/{folder?}")]
+        [HttpGet("lists/{folder?}")]
         [AllowAnonymous]
         public IActionResult ListFiles(string folder = "uploads")
         {
@@ -284,7 +284,7 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// 🌤️ Delete image from Cloudinary
         /// </summary>
-        [HttpDelete("cloudinary/delete")]
+        [HttpDelete("cloudinary/deletions")]
         [AllowAnonymous]
         public async Task<IActionResult> DeleteFromCloudinary([FromBody] CloudinaryDeleteRequest request)
         {
