@@ -492,6 +492,38 @@ namespace BE_Phygens.Controllers
                     });
                 }
 
+                // Nếu request có đủ dữ liệu thủ công (không phải AI)
+                if (!string.IsNullOrEmpty(request.QuestionText) && request.AnswerChoices != null && request.AnswerChoices.Any())
+                {
+                    var manualQuestion = new QuestionDto
+                    {
+                        QuestionId = Guid.NewGuid().ToString(),
+                        QuestionText = request.QuestionText,
+                        QuestionType = request.QuestionType,
+                        Difficulty = request.DifficultyLevel,
+                        DifficultyLevel = request.DifficultyLevel,
+                        Topic = request.SpecificTopic,
+                        Explanation = request.Explanation,
+                        CreatedBy = request.CreatedBy ?? "admin",
+                        CreatedAt = DateTime.UtcNow,
+                        AnswerChoices = request.AnswerChoices
+                    };
+
+                    if (request.SaveToDatabase)
+                    {
+                        await SaveQuestionToDatabase(manualQuestion);
+                    }
+
+                    return Ok(new ApiResponse<QuestionDto>
+                    {
+                        Success = true,
+                        Message = "Tạo câu hỏi thủ công thành công",
+                        Data = manualQuestion
+                    });
+                }
+                else
+                {
+                    // Nếu là AI, giữ nguyên logic cũ
                 var question = await _aiService.GenerateQuestionAsync(chapter, request);
 
                 if (request.SaveToDatabase)
@@ -505,6 +537,7 @@ namespace BE_Phygens.Controllers
                     Message = "Tạo câu hỏi thành công",
                     Data = question
                 });
+                }
             }
             catch (Exception ex)
             {
@@ -942,14 +975,15 @@ namespace BE_Phygens.Controllers
                 _logger.LogInformation($"Creating {questionDto.AnswerChoices?.Count ?? 0} answer choices...");
                 foreach (var choice in questionDto.AnswerChoices ?? new List<AnswerChoiceDto>())
                 {
+                    // Gán ChoiceId duy nhất cho mỗi đáp án
                     var answerChoice = new AnswerChoice
                     {
-                        ChoiceId = choice.ChoiceId,
+                        ChoiceId = string.IsNullOrEmpty(choice.ChoiceId) ? Guid.NewGuid().ToString() : choice.ChoiceId,
                         QuestionId = questionDto.QuestionId,
                         ChoiceLabel = choice.ChoiceLabel,
                         ChoiceText = choice.ChoiceText,
                         IsCorrect = choice.IsCorrect,
-                        DisplayOrder = choice.DisplayOrder
+                        DisplayOrder = choice.DisplayOrder > 0 ? choice.DisplayOrder : 1 // Đảm bảo > 0 theo constraint
                     };
                     _context.AnswerChoices.Add(answerChoice);
                 }

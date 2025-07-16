@@ -208,6 +208,12 @@ namespace BE_Phygens.Dto
         public bool IncludeExplanation { get; set; } = true;
 
         public bool IncludeImage { get; set; } = false;
+        
+        // Thêm các trường cho tạo thủ công
+        public string? QuestionText { get; set; }
+        public List<AnswerChoiceDto>? AnswerChoices { get; set; }
+        public string? Explanation { get; set; }
+        public string? CreatedBy { get; set; }
     }
 
     public class BatchGenerateRequest
