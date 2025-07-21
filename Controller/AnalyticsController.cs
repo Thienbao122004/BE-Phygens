@@ -516,31 +516,18 @@ namespace BE_Phygens.Controllers
         [HttpGet("sample-exams")]
         public async Task<ActionResult<ApiResponse<List<SampleExamDto>>>> GetSampleExams(
             [FromQuery] int? grade = null,
-            [FromQuery] string? subject = null,
+            [FromQuery] string? chapterId = null,
             [FromQuery] string? difficulty = null,
             [FromQuery] int limit = 10)
         {
             try
             {
                 var query = _context.Exams.AsQueryable();
-                if (grade.HasValue)
+                
+                if (grade.HasValue || !string.IsNullOrEmpty(chapterId) || !string.IsNullOrEmpty(difficulty))
                 {
                     query = query.Where(e => _context.ExamQuestions.Any(eq => eq.ExamId == e.ExamId));
-                    _logger.LogInformation($"After basic filter count: {await query.CountAsync()}");
-                }
-
-                if (!string.IsNullOrEmpty(subject))
-                {
-                    query = query.Where(e => e.ExamName.Contains(subject) ||
-                                           e.Description.Contains(subject) ||
-                                           e.ExamType.Contains(subject));
-                    _logger.LogInformation($"After subject filter count: {await query.CountAsync()}");
-                }
-
-                if (!string.IsNullOrEmpty(difficulty))
-                {
-                    query = query.Where(e => _context.ExamQuestions.Any(eq => eq.ExamId == e.ExamId));
-                    _logger.LogInformation($"After basic difficulty filter count: {await query.CountAsync()}");
+                    _logger.LogInformation($"After filter count: {await query.CountAsync()}");
                 }
 
                 var sampleExams = await query
@@ -554,8 +541,8 @@ namespace BE_Phygens.Controllers
                         ExamType = e.ExamType,
                         Duration = e.DurationMinutes ?? 45,
                         QuestionCount = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId),
-                        Difficulty = "medium", // Default value for testing
-                        Grade = 10, // Default value for testing
+                        Difficulty = difficulty ?? "medium", 
+                        Grade = grade ?? 10, 
                         Subject = "Vật lý",
                         CreatedAt = e.CreatedAt,
                         IsPopular = _context.ExamQuestions.Count(eq => eq.ExamId == e.ExamId) >= 10
@@ -567,184 +554,17 @@ namespace BE_Phygens.Controllers
                 return Ok(new ApiResponse<List<SampleExamDto>>
                 {
                     Success = true,
-                    Message = $"Retrieved {sampleExams.Count} sample exams (debug mode)",
+                    Message = $"Retrieved {sampleExams.Count} sample exams with filters: grade={grade}, chapterId={chapterId}, difficulty={difficulty}",
                     Data = sampleExams
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting sample exams (debug)");
+                _logger.LogError(ex, "Error getting sample exams");
                 return StatusCode(500, new ApiResponse<List<SampleExamDto>>
                 {
                     Success = false,
                     Message = $"Server error: {ex.Message}"
-                });
-            }
-        }
-
-        // GET: analytics/system-health
-        [HttpGet("system-health")]
-        public async Task<IActionResult> GetSystemHealth()
-        {
-            try
-            {
-                // Check database connection
-                var canConnectToDb = await _context.Database.CanConnectAsync();
-                
-                // Check key services
-                var examsCount = await _context.Exams.CountAsync();
-                var usersCount = await _context.Users.CountAsync();
-                var questionsCount = await _context.Questions.CountAsync();
-                var chaptersCount = await _context.Chapters.CountAsync();
-                
-                // Calculate system health status
-                var status = "healthy";
-                var message = "Tất cả dịch vụ hoạt động bình thường";
-                
-                if (!canConnectToDb)
-                {
-                    status = "error";
-                    message = "Không thể kết nối tới cơ sở dữ liệu";
-                }
-                else if (examsCount == 0 && questionsCount == 0)
-                {
-                    status = "warning";
-                    message = "Hệ thống chưa có dữ liệu đề thi hoặc câu hỏi";
-                }
-                
-                // Get platform features with usage statistics
-                var platformFeatures = new[]
-                {
-                    new
-                    {
-                        id = "ai_generation",
-                        title = "AI Generation",
-                        description = "Tạo đề thi tự động bằng trí tuệ nhân tạo với độ chính xác cao",
-                        status = "active",
-                        usageCount = examsCount,
-                        icon = "robot"
-                    },
-                    new
-                    {
-                        id = "smart_exam",
-                        title = "Smart Exam",
-                        description = "Đề thi thích ứng - AI tự động điều chỉnh độ khó theo năng lực",
-                        status = "active",
-                        usageCount = (int)(examsCount * 0.3),
-                        icon = "brain"
-                    },
-                    new
-                    {
-                        id = "analytics_ai",
-                        title = "Analytics AI",
-                        description = "Phân tích chi tiết kết quả học tập bằng machine learning",
-                        status = "active",
-                        usageCount = usersCount,
-                        icon = "chart"
-                    },
-                    new
-                    {
-                        id = "realtime",
-                        title = "Real-time",
-                        description = "Tạo đề thi ngay lập tức, không cần chờ đợi",
-                        status = "active",
-                        usageCount = questionsCount,
-                        icon = "flash"
-                    },
-                    new
-                    {
-                        id = "auto_grading",
-                        title = "Auto Grading",
-                        description = "Chấm điểm tự động cho cả trắc nghiệm và tự luận",
-                        status = "beta",
-                        usageCount = (int)(questionsCount * 0.6),
-                        icon = "check"
-                    },
-                    new
-                    {
-                        id = "adaptive_learning",
-                        title = "Adaptive Learning",
-                        description = "Học tập thích ứng theo từng học sinh",
-                        status = "coming_soon",
-                        usageCount = 0,
-                        icon = "graduation"
-                    }
-                };
-                
-                var response = new
-                {
-                    systemHealth = new
-                    {
-                        status = status,
-                        message = message,
-                        lastChecked = DateTime.UtcNow,
-                        databaseConnection = canConnectToDb,
-                        services = new
-                        {
-                            exams = examsCount > 0,
-                            users = usersCount > 0,
-                            questions = questionsCount > 0,
-                            chapters = chaptersCount > 0
-                        }
-                    },
-                    platformFeatures = platformFeatures,
-                    statistics = new
-                    {
-                        totalExams = examsCount,
-                        totalUsers = usersCount,
-                        totalQuestions = questionsCount,
-                        totalChapters = chaptersCount
-                    }
-                };
-                
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking system health");
-                return StatusCode(500, new
-                {
-                    systemHealth = new
-                    {
-                        status = "error",
-                        message = "Không thể kiểm tra trạng thái hệ thống",
-                        lastChecked = DateTime.UtcNow
-                    },
-                    error = ex.Message
-                });
-            }
-        }
-
-        // GET: analytics/ai-status
-        [HttpGet("ai-status")]
-        public async Task<IActionResult> GetAIStatus()
-        {
-            try
-            {
-                // This could be expanded to check actual AI service status
-                // For now, we'll simulate AI service status
-                var aiStatus = new
-                {
-                    connected = true,
-                    provider = "OpenAI",
-                    model = "GPT-4",
-                    lastResponse = DateTime.UtcNow.AddMinutes(-2),
-                    averageResponseTime = 1.5, // seconds
-                    successRate = 98.5, // percentage
-                    totalRequestsToday = await _context.Exams.CountAsync(e => e.CreatedAt >= DateTime.UtcNow.Date),
-                    status = "healthy"
-                };
-                
-                return Ok(aiStatus);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting AI status");
-                return StatusCode(500, new
-                {
-                    connected = false,
-                    status = "error",
-                    message = ex.Message
                 });
             }
         }

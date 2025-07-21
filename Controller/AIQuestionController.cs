@@ -136,9 +136,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Generate multiple questions in batch
-        /// </summary>
+        /// Sinh nhiều câu hỏi AI
         [HttpPost("batches")]
         public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GenerateBatchQuestions([FromBody] BatchGenerateRequest request)
         {
@@ -205,9 +203,8 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Analyze and improve existing question using AI
-        /// </summary>
+
+        /// Cải thiện câu hỏi
         [HttpPut("{questionId}/improvements")]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> ImproveQuestion(string questionId, [FromBody] ImproveQuestionRequest request)
         {
@@ -244,9 +241,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Get AI suggestions for question topics
-        /// </summary>
+        // Gợi ý chủ đề
         [HttpGet("topics/suggestions")]
         public async Task<ActionResult<ApiResponse<List<TopicSuggestionDto>>>> SuggestTopics([FromQuery] int chapterId, [FromQuery] int maxSuggestions = 5)
         {
@@ -284,9 +279,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Validate question quality using AI
-        /// </summary>
+        // Đánh giá chất lượng câu hỏi
         [HttpGet("{questionId}/validations")]
         public async Task<ActionResult<ApiResponse<QuestionValidationDto>>> ValidateQuestion(string questionId)
         {
@@ -323,42 +316,40 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// Test AI connection and capabilities
-        /// </summary>
-        [HttpGet("health/ai-connections")]
-        [AllowAnonymous]
-        public async Task<ActionResult<ApiResponse<object>>> TestAIConnection()
-        {
-            try
-            {
-                var isConnected = await _aiService.TestAIConnectionAsync();
-                var config = await _aiService.GetAIStatusAsync();
 
-                return Ok(new ApiResponse<object>
-                {
-                    Success = isConnected,
-                    Message = isConnected ? "Kết nối AI thành công" : "Không thể kết nối AI",
-                    Data = new
-                    {
-                        Connected = isConnected,
-                        Provider = config.Provider,
-                        Model = config.Model,
-                        IsConfigured = config.IsConfigured,
-                        Features = config.SupportedFeatures
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error testing AI connection");
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = $"Lỗi test kết nối AI: {ex.Message}"
-                });
-            }
-        }
+        // [HttpGet("health/ai-connections")]
+        // [AllowAnonymous]
+        // public async Task<ActionResult<ApiResponse<object>>> TestAIConnection()
+        // {
+        //     try
+        //     {
+        //         var isConnected = await _aiService.TestAIConnectionAsync();
+        //         var config = await _aiService.GetAIStatusAsync();
+
+        //         return Ok(new ApiResponse<object>
+        //         {
+        //             Success = isConnected,
+        //             Message = isConnected ? "Kết nối AI thành công" : "Không thể kết nối AI",
+        //             Data = new
+        //             {
+        //                 Connected = isConnected,
+        //                 Provider = config.Provider,
+        //                 Model = config.Model,
+        //                 IsConfigured = config.IsConfigured,
+        //                 Features = config.SupportedFeatures
+        //             }
+        //         });
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _logger.LogError(ex, "Error testing AI connection");
+        //         return StatusCode(500, new ApiResponse<object>
+        //         {
+        //             Success = false,
+        //             Message = $"Lỗi test kết nối AI: {ex.Message}"
+        //         });
+        //     }
+        // }
 
         /// <summary>
         /// Get all questions with pagination and filters
@@ -778,93 +769,6 @@ namespace BE_Phygens.Controllers
                 });
             }
         }
-
-        [HttpGet("debug/database-statuses")]
-        [AllowAnonymous]
-        public async Task<ActionResult<ApiResponse<object>>> GetDatabaseStatus()
-        {
-            try
-            {
-                _logger.LogInformation("Checking database status...");
-
-                var dbStatus = new
-                {
-                    CanConnect = await _context.Database.CanConnectAsync(),
-                    
-                    Tables = new
-                    {
-                        TotalUsers = await _context.Users.CountAsync(),
-                        ActiveUsers = await _context.Users.Where(u => u.IsActive).CountAsync(),
-                        
-                        TotalChapters = await _context.Chapters.CountAsync(),
-                        ActiveChapters = await _context.Chapters.Where(c => c.IsActive).CountAsync(),
-                        
-                        TotalQuestions = await _context.Questions.CountAsync(),
-                        ActiveQuestions = await _context.Questions.Where(q => q.IsActive).CountAsync(),
-                        
-                        TotalExams = await _context.Exams.CountAsync(),
-                        
-                        TotalPhysicsTopics = await _context.PhysicsTopics.CountAsync(),
-                        ActivePhysicsTopics = await _context.PhysicsTopics.Where(t => t.IsActive).CountAsync()
-                    },
-                    
-                    SampleChapters = await _context.Chapters
-                        .Where(c => c.IsActive)
-                        .Take(10)
-                        .Select(c => new { 
-                            c.ChapterId, 
-                            c.ChapterName, 
-                            c.Grade, 
-                            c.DisplayOrder,
-                            c.IsActive,
-                            c.CreatedAt
-                        })
-                        .ToListAsync(),
-                    
-                    SampleUsers = await _context.Users
-                        .Where(u => u.IsActive)
-                        .Take(5)
-                        .Select(u => new { 
-                            u.UserId, 
-                            u.Username, 
-                            u.Role, 
-                            u.IsActive 
-                        })
-                        .ToListAsync(),
-                    
-                    SamplePhysicsTopics = await _context.PhysicsTopics
-                        .Where(t => t.IsActive)
-                        .Take(5)
-                        .Select(t => new { 
-                            t.TopicId, 
-                            t.TopicName, 
-                            t.GradeLevel,
-                            t.IsActive 
-                        })
-                        .ToListAsync()
-                };
-
-                return Ok(new ApiResponse<object>
-                {
-                    Success = true,
-                    Message = "Database status retrieved successfully",
-                    Data = dbStatus
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking database status");
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = $"Lỗi kiểm tra database: {ex.Message}"
-                });
-            }
-        }
-        /// <summary>
-        /// Generate explanation for a question using AI
-        /// POST: questions/{questionId}/explanations
-        /// </summary>
         [HttpPost("{questionId}/explanations")]
         public async Task<IActionResult> GenerateExplanation(string questionId, [FromBody] GenerateExplanationRequest request = null)
         {

@@ -18,7 +18,6 @@ namespace BE_Phygens.Services
         {
             try
             {
-                // Lấy thông tin câu hỏi trước
                 var question = await _context.Questions
                     .Include(q => q.Topic)
                     .FirstOrDefaultAsync(q => q.QuestionId == questionId);
@@ -28,7 +27,6 @@ namespace BE_Phygens.Services
                     throw new ArgumentException("Không tìm thấy câu hỏi");
                 }
 
-                // 🎯 Tính điểm mỗi câu dựa trên tổng số câu trong đề
                 var examQuestion = await _context.ExamQuestions
                     .Include(eq => eq.Exam)
                     .FirstOrDefaultAsync(eq => eq.QuestionId == questionId);
@@ -41,16 +39,14 @@ namespace BE_Phygens.Services
                     
                     if (totalQuestionsInExam > 0)
                     {
-                        pointsPerQuestion = 10.0 / totalQuestionsInExam; // Chia 10 điểm cho tổng số câu
+                        pointsPerQuestion = 10.0 / totalQuestionsInExam; 
                     }
                 }
 
                 // Kiểm tra loại câu hỏi
                 if (question.QuestionType?.ToLower() == "essay")
                 {
-                    // Xử lý câu hỏi tự luận
-                    // Với câu hỏi tự luận, studentChoiceId thực chất là nội dung bài làm
-                    var essayAnswer = studentChoiceId; // Tạm thời sử dụng studentChoiceId như là nội dung
+                    var essayAnswer = studentChoiceId; 
 
                     var result = new QuestionGradingResult
                     {
@@ -61,9 +57,9 @@ namespace BE_Phygens.Services
                         StudentChoiceId = "",
                         StudentChoiceLabel = "",
                         StudentChoiceText = essayAnswer ?? "",
-                        IsCorrect = false, // Tạm thời để false, cần chấm thủ công
-                        PointsEarned = 0, // Tạm thời 0 điểm, cần chấm thủ công
-                        MaxPoints = pointsPerQuestion, // 🎯 Điểm tối đa dựa trên số câu
+                        IsCorrect = false, 
+                        PointsEarned = 0,
+                        MaxPoints = pointsPerQuestion, 
                         Feedback = "Câu hỏi tự luận cần được chấm thủ công",
                         Explanation = "Đây là câu hỏi tự luận, cần giáo viên chấm điểm",
                         DifficultyLevel = question.DifficultyLevel ?? "",
@@ -83,8 +79,8 @@ namespace BE_Phygens.Services
                                 ExamId = examQuestion.ExamId,
                                 StartTime = DateTime.UtcNow,
                                 EndTime = DateTime.UtcNow,
-                                TotalScore = 0, // Chờ chấm thủ công
-                                MaxScore = 10.0m, // Thang điểm 10
+                                TotalScore = 0, 
+                                MaxScore = 10.0m, 
                                 Status = "completed"
                             };
                             _context.StudentAttempts.Add(attempt);
@@ -95,9 +91,9 @@ namespace BE_Phygens.Services
                                 AttemptId = attempt.AttemptId,
                                 QuestionId = questionId,
                                 SelectedChoiceId = null,
-                                StudentTextAnswer = essayAnswer, // Lưu nội dung tự luận
-                                IsCorrect = false, // Chờ chấm thủ công
-                                PointsEarned = 0, // Chờ chấm thủ công
+                                StudentTextAnswer = essayAnswer, 
+                                IsCorrect = false, 
+                                PointsEarned = 0, 
                                 AnsweredAt = DateTime.UtcNow
                             };
 
@@ -109,7 +105,6 @@ namespace BE_Phygens.Services
                     return result;
                 }
 
-                // Xử lý câu hỏi trắc nghiệm như cũ
                 // Query AnswerChoices bằng projection để tránh NULL displayOrder issues
                 var answerChoicesData = await _context.AnswerChoices
                     .Where(ac => ac.QuestionId == questionId)
@@ -139,29 +134,24 @@ namespace BE_Phygens.Services
                     throw new ArgumentException("Không tìm thấy lựa chọn của học sinh");
                 }
 
-                // Lấy đáp án đúng từ answerChoicesData
                 var correctChoiceData = answerChoicesData.FirstOrDefault(c => c.IsCorrect);
                 if (correctChoiceData == null)
                 {
                     throw new InvalidOperationException("Câu hỏi không có đáp án đúng");
                 }
 
-                // 🎯 Kiểm tra đáp án và tính điểm dựa trên số câu
                 bool isCorrect = studentChoiceData.IsCorrect;
-                double pointsEarned = isCorrect ? pointsPerQuestion : 0.0; // Điểm dựa trên số câu trong đề
+                double pointsEarned = isCorrect ? pointsPerQuestion : 0.0;
 
-                // Lấy giải thích cho câu hỏi
                 var explanation = await _context.Explanations
                     .FirstOrDefaultAsync(e => e.QuestionId == questionId);
 
-                // Debug: Log dữ liệu trước khi tạo result
                 _logger.LogInformation("Debug AutoGrading - Question {QuestionId}: Student={StudentLabel}.{StudentText}, Correct={CorrectLabel}.{CorrectText}, Points: {PointsEarned}/{MaxPoints}", 
                     questionId, 
                     studentChoiceData.ChoiceLabel, studentChoiceData.ChoiceText,
                     correctChoiceData.ChoiceLabel, correctChoiceData.ChoiceText,
                     pointsEarned, pointsPerQuestion);
 
-                // Tạo kết quả
                 var multipleChoiceResult = new QuestionGradingResult
                 {
                     QuestionId = questionId,
@@ -172,8 +162,8 @@ namespace BE_Phygens.Services
                     StudentChoiceLabel = studentChoiceData.ChoiceLabel ?? "",
                     StudentChoiceText = studentChoiceData.ChoiceText ?? "",
                     IsCorrect = isCorrect,
-                    PointsEarned = pointsEarned, // 🎯 Điểm thực tế dựa trên số câu
-                    MaxPoints = pointsPerQuestion, // 🎯 Điểm tối đa dựa trên số câu
+                    PointsEarned = pointsEarned, 
+                    MaxPoints = pointsPerQuestion, 
                     Feedback = isCorrect ? "Chính xác!" : "Chưa chính xác",
                     Explanation = explanation?.ExplanationText ?? "Chưa có giải thích chi tiết",
                     DifficultyLevel = question.DifficultyLevel ?? "",
@@ -203,7 +193,7 @@ namespace BE_Phygens.Services
                         ExamId = examQuestion.ExamId,
                         StartTime = DateTime.UtcNow,
                         EndTime = DateTime.UtcNow,
-                        TotalScore = (decimal)pointsEarned, // 🎯 Lưu điểm thực tế
+                        TotalScore = (decimal)pointsEarned, 
                         MaxScore = 10.0m, // Thang điểm 10
                         Status = "completed"
                     };
@@ -216,7 +206,7 @@ namespace BE_Phygens.Services
                         QuestionId = questionId,
                         SelectedChoiceId = studentChoiceId,
                         IsCorrect = isCorrect,
-                        PointsEarned = (decimal)pointsEarned, // 🎯 Lưu điểm thực tế
+                        PointsEarned = (decimal)pointsEarned, 
                         AnsweredAt = DateTime.UtcNow
                     };
 
@@ -341,13 +331,12 @@ namespace BE_Phygens.Services
             };
             _context.StudentAttempts.Add(attempt);
 
-            // 🎯 Tính điểm mỗi câu dựa trên tổng số câu trong đề
             int totalQuestionsInExam = exam.ExamQuestions.Count;
             double pointsPerQuestion = totalQuestionsInExam > 0 ? 10.0 / totalQuestionsInExam : 1.0;
 
             // Chấm từng câu hỏi
             var questionResults = new List<QuestionGradingResult>();
-            double totalPointsEarned = 0; // 🎯 Sử dụng điểm thực tế
+            double totalPointsEarned = 0; 
             int correctAnswers = 0;
             var topicAccuracy = new Dictionary<string, (int correct, int total)>();
             var difficultyBreakdown = new Dictionary<string, int>();
@@ -377,7 +366,6 @@ namespace BE_Phygens.Services
                     correctAnswers++;
                 }
 
-                // 🎯 Cộng điểm thực tế từ từng câu
                 totalPointsEarned += result.PointsEarned;
 
                 // Cập nhật thống kê theo chủ đề
@@ -407,17 +395,16 @@ namespace BE_Phygens.Services
                 }
             }
 
-            // 🎯 Cập nhật thông tin attempt - sử dụng điểm thực tế
             var percentageScore = totalQuestionsInExam > 0 ? (totalPointsEarned / 10.0 * 100) : 0;
             var finalScore = Math.Max(0, totalPointsEarned); // Điểm thực tế, tối thiểu 0
             
             // Debug: Log chi tiết về tính điểm
-            _logger.LogInformation("🔢 AutoGrading Debug - Exam: {ExamId}, Student: {StudentId}", examId, studentUserId);
-            _logger.LogInformation("📊 Points: {TotalPointsEarned}/10 = {PercentageScore}% | Questions: {CorrectAnswers}/{TotalQuestions}", 
+            _logger.LogInformation(" AutoGrading Debug - Exam: {ExamId}, Student: {StudentId}", examId, studentUserId);
+            _logger.LogInformation(" Points: {TotalPointsEarned}/10 = {PercentageScore}% | Questions: {CorrectAnswers}/{TotalQuestions}", 
                 totalPointsEarned, percentageScore, correctAnswers, totalQuestionsInExam);
-            _logger.LogInformation("📈 PointsPerQuestion: {PointsPerQuestion}, FinalScore: {FinalScore}", pointsPerQuestion, finalScore);
+            _logger.LogInformation(" PointsPerQuestion: {PointsPerQuestion}, FinalScore: {FinalScore}", pointsPerQuestion, finalScore);
             
-            attempt.TotalScore = Math.Round((decimal)finalScore, 2); // 🎯 Lưu điểm thực tế, làm tròn 2 chữ số
+            attempt.TotalScore = Math.Round((decimal)finalScore, 2); 
             attempt.MaxScore = 10;
             await _context.SaveChangesAsync();
 
@@ -430,9 +417,9 @@ namespace BE_Phygens.Services
                 TotalQuestions = totalQuestionsInExam,
                 CorrectAnswers = correctAnswers,
                 IncorrectAnswers = totalQuestionsInExam - correctAnswers,
-                TotalPointsEarned = Math.Round(totalPointsEarned, 2), // 🎯 Điểm thực tế, làm tròn 2 chữ số
-                MaxPossiblePoints = 10, // Thang điểm tối đa là 10 
-                PercentageScore = Math.Round(percentageScore, 2), // 🎯 Tính % dựa trên điểm thực tế
+                TotalPointsEarned = Math.Round(totalPointsEarned, 2), 
+                MaxPossiblePoints = 10,
+                PercentageScore = Math.Round(percentageScore, 2), 
                 Grade = GetGrade(percentageScore),
                 CompletedAt = DateTime.UtcNow,
                 DifficultyBreakdown = difficultyBreakdown,

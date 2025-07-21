@@ -312,43 +312,21 @@ namespace BE_Phygens
             app.UseAuthorization();
 
             // Swagger chỉ trong Development hoặc có biến môi trường ENABLE_SWAGGER
-            if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI(c =>
-                {
-                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "BE-Phygens API V1");
-                    c.RoutePrefix = ""; // Đặt Swagger UI làm trang chủ
-                });
-            }
-
-            // Health check endpoint
-            // app.MapGet("/health", async (PhygensContext context) => 
+            // if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("ENABLE_SWAGGER") == "true")
             // {
-            //     try
+            //     app.UseSwagger();
+            //     app.UseSwaggerUI(c =>
             //     {
-            //         var canConnect = await context.Database.CanConnectAsync();
-            //         var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-                    
-            //         return Results.Ok(new { 
-            //             status = canConnect ? "healthy" : "database_error",
-            //             database_connected = canConnect,
-            //             pending_migrations = pendingMigrations.ToList(),
-            //             timestamp = DateTime.UtcNow,
-            //             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
-            //         });
-            //     }
-            //     catch (Exception ex)
-            //     {
-            //         return Results.Json(new { 
-            //             status = "error", 
-            //             error = ex.Message,
-            //             timestamp = DateTime.UtcNow 
-            //         }, statusCode: 500);
-            //     }
-            // });
-
-            // Auto migration trên Railway/Production
+            //         c.SwaggerEndpoint("/swagger/v1/swagger.json", "BE-Phygens API V1");
+            //         c.RoutePrefix = ""; // Đặt Swagger UI làm trang chủ
+            //     });
+            // }
+            app.UseSwagger();
+            app.UseSwaggerUI(c =>
+            {
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "BE-Phygens API V1");
+                c.RoutePrefix = ""; // Đặt Swagger UI làm trang chủ
+            });
             if (!app.Environment.IsDevelopment())
             {
                 try 
