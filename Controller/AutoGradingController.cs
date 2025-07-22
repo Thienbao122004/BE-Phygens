@@ -416,7 +416,7 @@ namespace BE_Phygens.Controller
         /// <summary>
         /// POST: auto-grading/questions/batch-grade - Chấm điểm nhiều câu hỏi cùng lúc
         /// </summary>
-        [HttpPost("questions/grades-batch")]
+        [HttpPost("questions/grading/batch")]
         public async Task<IActionResult> BatchGradeQuestions([FromBody] BatchGradeRequest request)
         {
             try

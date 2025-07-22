@@ -529,7 +529,7 @@ namespace BE_Phygens.Controllers
         }
 
         // POST: exams/generate
-        [HttpPost("generations")]
+        [HttpPost("generation")]
         public async Task<IActionResult> GenerateExam([FromBody] ExamGenerateDto generateDto)
         {
             // Validate ExamType to ensure it matches database constraint

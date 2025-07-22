@@ -77,7 +77,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: analytics/activities
-        [HttpGet("recent-activities")]
+        [HttpGet("recent")]
         public async Task<ActionResult<ApiResponse<List<object>>>> GetRecentActivities([FromQuery] int limit = 10)
         {
             try

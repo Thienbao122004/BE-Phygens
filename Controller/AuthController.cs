@@ -412,24 +412,24 @@ namespace BE_Phygens.Controllers
         /// <summary>
         /// Debug: Check password hash for testing
         /// </summary>
-        [HttpPost("debug/hash")]
-        public ActionResult<ApiResponse<object>> DebugHashPassword([FromBody] string password)
-        {
-            try
-            {
-                var hashed = HashPassword(password);
-                return Ok(ApiResponse<object>.SuccessResult(new 
-                { 
-                    original = password,
-                    md5_hash = hashed 
-                }, "Password hash generated"));
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.ErrorResult(
-                    "Error generating hash", new List<string> { ex.Message }));
-            }
-        }
+        // [HttpPost("debug/hash")]
+        // public ActionResult<ApiResponse<object>> DebugHashPassword([FromBody] string password)
+        // {
+        //     try
+        //     {
+        //         var hashed = HashPassword(password);
+        //         return Ok(ApiResponse<object>.SuccessResult(new 
+        //         { 
+        //             original = password,
+        //             md5_hash = hashed 
+        //         }, "Password hash generated"));
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return StatusCode(500, ApiResponse<object>.ErrorResult(
+        //             "Error generating hash", new List<string> { ex.Message }));
+        //     }
+        // }
 
     
     }

@@ -29,7 +29,7 @@ namespace BE_Phygens.Controllers
         /// Generate AI question using real AI service (OpenAI/Gemini)
         /// POST: questions/ai-generated
         /// </summary>
-        [HttpPost("ai-generations")]
+        [HttpPost("generation/ai")]
         public async Task<IActionResult> GenerateQuestion([FromBody] GenerateQuestionRequest request)
         {
             try
@@ -205,7 +205,7 @@ namespace BE_Phygens.Controllers
 
 
         /// Cải thiện câu hỏi
-        [HttpPut("{questionId}/improvements")]
+        [HttpPut("{questionId}/improvement")]
         public async Task<ActionResult<ApiResponse<QuestionDto>>> ImproveQuestion(string questionId, [FromBody] ImproveQuestionRequest request)
         {
             try
@@ -280,7 +280,7 @@ namespace BE_Phygens.Controllers
         }
 
         // Đánh giá chất lượng câu hỏi
-        [HttpGet("{questionId}/validations")]
+        [HttpGet("{questionId}/validation")]
         public async Task<ActionResult<ApiResponse<QuestionValidationDto>>> ValidateQuestion(string questionId)
         {
             try
@@ -769,7 +769,7 @@ namespace BE_Phygens.Controllers
                 });
             }
         }
-        [HttpPost("{questionId}/explanations")]
+        [HttpPost("{questionId}/explanation")]
         public async Task<IActionResult> GenerateExplanation(string questionId, [FromBody] GenerateExplanationRequest request = null)
         {
             try

@@ -30,7 +30,7 @@ namespace BE_Phygens.Controllers
         /// Tạo câu hỏi tự luận bằng AI
         /// POST: api/essay/generate
         /// </summary>
-        [HttpPost("generates")]
+        [HttpPost("generation")]
         public async Task<ActionResult<ApiResponse<EssayQuestionDto>>> GenerateEssayQuestion([FromBody] GenerateEssayQuestionRequest request)
         {
             try
@@ -81,7 +81,7 @@ namespace BE_Phygens.Controllers
         /// Chấm điểm bài tự luận
         /// POST: api/essay/grade
         /// </summary>
-        [HttpPost("grades")]
+        [HttpPost("grading")]
         public async Task<ActionResult<ApiResponse<EssayGradingResultDto>>> GradeEssay([FromBody] EssayAnswerSubmissionDto submission)
         {
             try
@@ -126,7 +126,7 @@ namespace BE_Phygens.Controllers
         /// Chấm điểm hàng loạt bài tự luận
         /// POST: api/essay/batch-grade
         /// </summary>
-        [HttpPost("grades-batch")]
+        [HttpPost("grading/batch")]
         public async Task<ActionResult<ApiResponse<List<EssayGradingResultDto>>>> BatchGradeEssays([FromBody] EssayBatchGradingRequest request)
         {
             try
@@ -157,7 +157,7 @@ namespace BE_Phygens.Controllers
         /// Phân tích bài viết tự luận
         /// POST: api/essay/analyze
         /// </summary>
-        [HttpPost("analyses")]
+        [HttpPost("analysis")]
         public async Task<ActionResult<ApiResponse<EssayAnalysisDto>>> AnalyzeEssay([FromBody] AnalyzeEssayRequest request)
         {
             try
