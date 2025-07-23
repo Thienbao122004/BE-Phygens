@@ -200,7 +200,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: analytics/recent-attempts
-        [HttpGet("recent-attempts")]
+        [HttpGet("attempts/recent")]
         public async Task<IActionResult> GetRecentAttempts([FromQuery] int limit = 10)
         {
             try
@@ -236,7 +236,7 @@ namespace BE_Phygens.Controllers
         }
 
         // GET: analytics/exams
-        [HttpGet("exam-stats")]
+        [HttpGet("exam-statistics")]
         public async Task<ActionResult<ApiResponse<ExamStatsDto>>> GetExamStats()
         {
             try
@@ -418,7 +418,7 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        [HttpGet("chapter-analytics")]
+        [HttpGet("chapters")]
         public async Task<ActionResult<ApiResponse<List<ChapterAnalyticsDto>>>> GetChapterAnalytics([FromQuery] int? grade = null)
         {
             try

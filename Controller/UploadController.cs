@@ -281,10 +281,8 @@ namespace BE_Phygens.Controllers
             }
         }
 
-        /// <summary>
-        /// 🌤️ Delete image from Cloudinary
-        /// </summary>
-        [HttpDelete("cloudinary/deletions")]
+
+        [HttpDelete("cloudinary/deletion")]
         [AllowAnonymous]
         public async Task<IActionResult> DeleteFromCloudinary([FromBody] CloudinaryDeleteRequest request)
         {

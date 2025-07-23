@@ -186,7 +186,7 @@ namespace BE_Phygens.Controllers
         /// Tạo phản hồi cho bài tự luận
         /// POST: api/essay/feedback
         /// </summary>
-        [HttpPost("feedbacks")]
+        [HttpPost("feedback")]
         public async Task<ActionResult<ApiResponse<string>>> GenerateFeedback([FromBody] GenerateFeedbackRequest request)
         {
             try
@@ -218,7 +218,7 @@ namespace BE_Phygens.Controllers
         /// Validate câu trả lời tự luận
         /// POST: api/essay/validate
         /// </summary>
-        [HttpPost("validations")]
+        [HttpPost("validation")]
         public async Task<ActionResult<ApiResponse<bool>>> ValidateEssayAnswer([FromBody] ValidateEssayRequest request)
         {
             try

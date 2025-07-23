@@ -137,7 +137,7 @@ namespace BE_Phygens.Controllers
         }
 
         /// Sinh nhiều câu hỏi AI
-        [HttpPost("batches")]
+        [HttpPost("batch")]
         public async Task<ActionResult<ApiResponse<List<QuestionDto>>>> GenerateBatchQuestions([FromBody] BatchGenerateRequest request)
         {
             try
