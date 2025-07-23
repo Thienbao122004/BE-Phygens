@@ -783,17 +783,7 @@ Trả về theo định dạng JSON chính xác:
 
             return $@"
 Tạo một câu hỏi Vật lý {typeDesc} về chương ""{chapter.ChapterName}"" (lớp {chapter.Grade}) với độ khó {difficultyDesc}.
-
-Yêu cầu chất lượng cao:
-1. Câu hỏi phải chính xác về mặt khoa học và phù hợp chương trình THPT Việt Nam
-2. Có 4 lựa chọn đáp án (A, B, C, D) với 1 đáp án đúng duy nhất
-3. Các đáp án sai phải hợp lý, không quá dễ loại trừ
-4. Sử dụng thuật ngữ và ký hiệu Vật lý chuẩn
-5. Kèm giải thích chi tiết cho đáp án đúng
-{(string.IsNullOrEmpty(request.SpecificTopic) ? "" : $"6. Tập trung vào chủ đề cụ thể: {request.SpecificTopic}")}
-{(string.IsNullOrEmpty(request.AdditionalInstructions) ? "" : $"7. Yêu cầu bổ sung: {request.AdditionalInstructions}")}
-
-Trả về theo định dạng JSON chính xác:
+Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ trả về JSON):
 {{
   ""question"": ""Nội dung câu hỏi"",
   ""choices"": [
@@ -808,12 +798,12 @@ Trả về theo định dạng JSON chính xác:
 }}";
         }
 
-                private QuestionDto ParseAIQuestionResponse(string aiResponse, Chapter chapter, GenerateQuestionRequest request)
+        private QuestionDto ParseAIQuestionResponse(string aiResponse, Chapter chapter, GenerateQuestionRequest request)
         {
             try
             {
                 var parsedResponse = JsonSerializer.Deserialize<AIQuestionResponse>(aiResponse);
-                
+
                 var questionDto = new QuestionDto
                 {
                     QuestionId = Guid.NewGuid().ToString(),
@@ -859,7 +849,7 @@ Trả về theo định dạng JSON chính xác:
         private QuestionDto CreateMockQuestion(Chapter chapter, GenerateQuestionRequest request)
         {
             _logger.LogWarning($"🤖 Creating fallback question for Chapter: {chapter.ChapterName}");
-            
+
             var questionDto = new QuestionDto
             {
                 QuestionId = Guid.NewGuid().ToString(),
@@ -986,7 +976,7 @@ Trả về theo định dạng JSON chính xác:
             public string? Explanation { get; set; }
             public string? Difficulty { get; set; }
             public string? Topic { get; set; }
-            
+
             // Essay-specific properties
             public string? SampleAnswer { get; set; }
             public string[]? KeyPoints { get; set; }
