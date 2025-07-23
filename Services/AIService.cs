@@ -782,8 +782,8 @@ Trả về theo định dạng JSON chính xác:
             }
 
             return $@"
-Tạo một câu hỏi Vật lý {typeDesc} về chương ""{chapter.ChapterName}"" (lớp {chapter.Grade}) với độ khó {difficultyDesc}.
-Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ trả về JSON):
+Tạo một câu hỏi trắc nghiệm vật lý về chương ""{chapter.ChapterName}"" (lớp {chapter.Grade}), độ khó {difficultyDesc}.
+Chỉ trả về JSON đúng định dạng sau, KHÔNG giải thích gì thêm, KHÔNG thêm text ngoài JSON:
 {{
   ""question"": ""Nội dung câu hỏi"",
   ""choices"": [
@@ -792,7 +792,7 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
     {{""label"": ""C"", ""text"": ""Lựa chọn C"", ""isCorrect"": false}},
     {{""label"": ""D"", ""text"": ""Lựa chọn D"", ""isCorrect"": false}}
   ],
-  ""explanation"": ""Giải thích chi tiết tại sao đáp án B đúng và các đáp án khác sai"",
+  ""explanation"": ""Giải thích đáp án đúng"",
   ""difficulty"": ""{request.DifficultyLevel}"",
   ""topic"": ""{chapter.ChapterName}""
 }}";
@@ -802,7 +802,16 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
         {
             try
             {
-                var parsedResponse = JsonSerializer.Deserialize<AIQuestionResponse>(aiResponse);
+                _logger.LogInformation($"AI raw response: {aiResponse}");
+
+                // Tìm đoạn JSON đầu tiên trong response
+                int jsonStart = aiResponse.IndexOf('{');
+                int jsonEnd = aiResponse.LastIndexOf('}');
+                string json = (jsonStart >= 0 && jsonEnd > jsonStart)
+                    ? aiResponse.Substring(jsonStart, jsonEnd - jsonStart + 1)
+                    : aiResponse;
+
+                var parsedResponse = JsonSerializer.Deserialize<AIQuestionResponse>(json);
 
                 var questionDto = new QuestionDto
                 {
@@ -817,16 +826,13 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
                     Explanation = parsedResponse?.Explanation ?? ""
                 };
 
-                // Xử lý khác nhau cho essay vs multiple choice
+                // Xử lý đáp án
                 if (request.QuestionType == "essay")
                 {
-                    // Cho essay questions, không có answer choices
                     questionDto.AnswerChoices = new List<AnswerChoiceDto>();
-                    // Sample answer và key points sẽ được lưu trong explanation hoặc metadata
                 }
                 else
                 {
-                    // Cho multiple choice questions
                     questionDto.AnswerChoices = parsedResponse?.Choices?.Select(c => new AnswerChoiceDto
                     {
                         ChoiceId = Guid.NewGuid().ToString(),
@@ -837,10 +843,13 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
                     }).ToList() ?? new List<AnswerChoiceDto>();
                 }
 
+                _logger.LogInformation($"Parsed choices count: {parsedResponse?.Choices?.Length ?? 0}");
+
                 return questionDto;
             }
             catch (Exception ex)
             {
+                _logger.LogError($"AI response parse error. Raw: {aiResponse}");
                 _logger.LogError(ex, "Error parsing AI response, using mock question");
                 return CreateMockQuestion(chapter, request);
             }
@@ -971,10 +980,15 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
 
         private class AIQuestionResponse
         {
+            [JsonPropertyName("question")]
             public string? Question { get; set; }
+            [JsonPropertyName("choices")]
             public AIChoiceResponse[]? Choices { get; set; }
+            [JsonPropertyName("explanation")]
             public string? Explanation { get; set; }
+            [JsonPropertyName("difficulty")]
             public string? Difficulty { get; set; }
+            [JsonPropertyName("topic")]
             public string? Topic { get; set; }
 
             // Essay-specific properties
@@ -984,8 +998,11 @@ Trả về đúng định dạng JSON sau (KHÔNG giải thích gì thêm, chỉ
 
         private class AIChoiceResponse
         {
+            [JsonPropertyName("label")]
             public string Label { get; set; } = "";
+            [JsonPropertyName("text")]
             public string Text { get; set; } = "";
+            [JsonPropertyName("isCorrect")]
             public bool IsCorrect { get; set; }
         }
 
